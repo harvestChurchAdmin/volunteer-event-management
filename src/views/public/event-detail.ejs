@@ -1,0 +1,119 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
+
+<% const { fmt12 } = helpers; %>
+
+<section class="page-header page-shell">
+  <div>
+    <a href="/events" class="btn-link">&larr; Back to opportunities</a>
+    <h1><%= event.name %></h1>
+    <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain">
+    <% if (event.description) { %>
+      <p><%= event.description %></p>
+    <% } else { %>
+      <p class="muted">Details for this event are coming soon. Select a station and time block that fits your schedule.</p>
+    <% } %>
+  </article>
+</section>
+
+<%- include('../partials/messages', { messages }) %>
+
+<%
+  const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
+  const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0);
+%>
+
+<% if (hasTimeBlocks) { %>
+  <section class="page-section page-shell">
+    <div class="station-grid">
+      <% stations.forEach(station => { %>
+        <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
+        <% if (blocks.length > 0) { %>
+          <article class="card station-card">
+            <div class="card-header">
+              <div>
+                <h2>Station: <%= station.name %></h2>
+                <% if (station.description) { %>
+                  <p class="station-card__meta"><%= station.description %></p>
+                <% } %>
+              </div>
+            </div>
+            <ul class="time-block-list">
+              <% blocks.forEach(block => { %>
+            <li
+              class="time-block-item <%= block.is_full ? 'is-full' : '' %>"
+              data-block-id="<%= block.block_id %>"
+              data-start-time="<%= block.start_time %>"
+              data-end-time="<%= block.end_time %>"
+              data-is-full="<%= !!block.is_full %>"
+              role="button"
+              aria-pressed="false"
+              tabindex="<%= block.is_full ? -1 : 0 %>"
+            >
+              <div>
+                <strong><%= fmt12(block.start_time) %></strong>
+                    <span>&nbsp;–&nbsp;</span>
+                    <strong><%= fmt12(block.end_time) %></strong>
+                    <span class="muted"> • Capacity needed: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
+                    <span class="muted"> • Signed up: <%= block.reserved_count || 0 %></span>
+                  </div>
+                  <div>
+                    <% if (block.is_full) { %>
+                      <span class="badge">Full</span>
+                    <% } else { %>
+                      <button type="button" class="btn btn-ghost select-slot-btn">Select</button>
+                    <% } %>
+                  </div>
+                </li>
+              <% }) %>
+            </ul>
+          </article>
+        <% } %>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="page-section page-shell">
+    <div id="signup-form" class="card card--plain signup-panel" style="display:none;">
+      <div id="selected-slots-container"></div>
+      <h2>You're almost done</h2>
+      <p class="muted">Share your contact info so the team can confirm your spot.</p>
+      <form id="signupFormTag" action="/signup" method="POST" novalidate>
+        <input type="hidden" name="eventId" value="<%= event.event_id %>">
+        <div class="form-grid two">
+          <div class="form-group">
+            <label for="signup-name">Full name</label>
+            <input type="text" id="signup-name" name="name" placeholder="Full Name" required>
+          </div>
+          <div class="form-group">
+            <label for="signup-email">Email</label>
+            <input type="email" id="signup-email" name="email" placeholder="you@example.com" required>
+          </div>
+          <div class="form-group full">
+            <label for="signup-phone">Phone</label>
+            <input type="tel" id="signup-phone" name="phone" placeholder="(555) 555-1234" required>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button type="submit" class="btn btn-primary">Confirm selected slots</button>
+        </div>
+      </form>
+    </div>
+  </section>
+<% } else { %>
+  <section class="page-section page-shell">
+    <article class="card card--plain empty-state">
+      <h2>No volunteer slots yet</h2>
+      <p class="muted">There are no volunteer slots available for this event yet. Please check back soon or reach out to the coordinator.</p>
+      <div class="action-row">
+        <a class="btn btn-ghost" href="/events">Back to opportunities</a>
+      </div>
+    </article>
+  </section>
+<% } %>
+
+<%- include('../partials/footer') %>

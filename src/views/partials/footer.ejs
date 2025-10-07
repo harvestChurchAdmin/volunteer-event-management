@@ -1,0 +1,24 @@
+    </main>
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <div>
+          <p class="site-footer__title">Harvest Event Opportunities</p>
+        </div>
+        <div class="site-footer__links">
+          <a href="/events">Find Opportunities</a>
+          <% if (user) { %>
+            <a href="/admin/dashboard">Admin Dashboard</a>
+            <a href="/logout">Logout</a>
+          <% } else { %>
+            <a href="/login">Admin Login</a>
+          <% } %>
+        </div>
+      </div>
+      <div class="site-footer__meta">
+        <p>&copy; <%= new Date().getFullYear() %> Harvest Church. All rights reserved.</p>
+      </div>
+    </footer>
+    <script src="/js/main.js" defer></script>
+    <script src="/js/admin-event-detail.js" defer></script>
+</body>
+</html>

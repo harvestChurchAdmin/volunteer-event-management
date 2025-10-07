@@ -1,0 +1,118 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'admin' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <h1>Admin Dashboard</h1>
+    <p class="page-subtitle">Organize events, stations, and time blocks in one streamlined space.</p>
+  </div>
+  <div class="page-header__actions">
+    <button id="newEventBtn" class="btn btn-primary" data-open="#newEventModal">Create new event</button>
+  </div>
+</section>
+
+<%- include('../partials/messages', { messages }) %>
+
+<%- include('../partials/modal-start', { id: 'newEventModal', title: 'Create New Event' }) %>
+  <form id="newEventForm" action="/admin/event" method="POST" novalidate>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label for="event-name">Event name</label>
+        <input type="text" id="event-name" name="name" required>
+      </div>
+      <div class="form-group full">
+        <label for="event-description">Event description</label>
+        <textarea id="event-description" name="description"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="event-start-new">Start date &amp; time</label>
+        <input type="hidden" id="event-start-new-hidden" name="date_start" value="">
+        <input type="datetime-local"
+               id="event-start-new"
+               class="datetime-field"
+               data-datetime-role="start"
+               data-canonical-target="event-start-new-hidden"
+               step="900"
+               required>
+      </div>
+      <div class="form-group">
+        <label for="event-end-new">End date &amp; time</label>
+        <input type="hidden" id="event-end-new-hidden" name="date_end" value="">
+        <input type="datetime-local"
+               id="event-end-new"
+               class="datetime-field"
+               data-datetime-role="end"
+               data-canonical-target="event-end-new-hidden"
+               step="900"
+               required>
+      </div>
+    </div>
+    <div class="card-actions">
+      <button type="submit" class="btn btn-primary">Create event</button>
+    </div>
+  </form>
+<%- include('../partials/modal-end', { id: 'newEventModal', formId: 'newEventForm' }) %>
+
+<section class="page-section page-shell">
+  <% if (events && events.length > 0) { %>
+    <article class="card card--table">
+      <div class="card-header">
+        <div>
+          <h2>Upcoming events</h2>
+          <p class="muted">Jump into an event to add stations, time blocks, and volunteers.</p>
+        </div>
+      </div>
+      <div class="table-scroll" role="region" aria-label="Existing events">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Dates</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% events.forEach(event => { %>
+              <tr>
+                <td><strong><%= event.name %></strong></td>
+                <td>
+                  <%= new Date(event.date_start).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
+                  &nbsp;–&nbsp;
+                  <%= new Date(event.date_end).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
+                </td>
+                <td>
+                  <span class="status-pill <%= event.is_published ? 'status-pill--live' : 'status-pill--draft' %>">
+                    <%= event.is_published ? 'Published' : 'Draft' %>
+                  </span>
+                </td>
+                <td class="row-actions">
+                  <a href="/admin/event/<%= event.event_id %>" class="btn btn-ghost">Manage</a>
+                  <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form">
+                    <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
+                    <input type="hidden" name="redirectTo" value="/admin/dashboard">
+                    <button type="submit" class="btn <%= event.is_published ? 'btn-secondary' : 'btn-primary' %>">
+                      <%= event.is_published ? 'Unpublish' : 'Publish' %>
+                    </button>
+                  </form>
+                  <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm" data-confirm="Delete this event and all of its stations, time blocks, and volunteers? This cannot be undone." data-confirm-cta="Delete">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  <% } else { %>
+    <article class="card card--plain empty-state">
+      <h2>No events created yet</h2>
+      <p class="muted">Start by creating your first event, then add stations and time blocks to open volunteer opportunities.</p>
+      <div class="action-row">
+      <button class="btn btn-primary" data-open="#newEventModal">Create your first event</button>
+    </div>
+  </article>
+<% } %>
+</section>
+
+<%- include('../partials/footer') %>

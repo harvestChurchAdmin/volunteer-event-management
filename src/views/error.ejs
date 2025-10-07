@@ -1,0 +1,23 @@
+<%- include('partials/header', { title: 'Error', user: locals.user, layoutVariant: 'public' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <h1>Something went wrong</h1>
+    <p class="page-subtitle">We ran into an issue while loading this page.</p>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain empty-state">
+    <h2>Error <%= locals.error ? error.status : '' %></h2>
+    <p><%= message %></p>
+    <% if (process.env.NODE_ENV === 'development' && locals.error) { %>
+      <pre><%= error.stack %></pre>
+    <% } %>
+    <div class="action-row">
+      <a href="/" class="btn btn-primary">Go to homepage</a>
+    </div>
+  </article>
+</section>
+
+<%- include('partials/footer') %>

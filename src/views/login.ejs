@@ -1,0 +1,22 @@
+<%- include('partials/header', { title, user: locals.user, layoutVariant: 'auth' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <h1>Admin Login</h1>
+    <p class="page-subtitle">Sign in with your authorized Google account to manage events.</p>
+  </div>
+</section>
+
+<%- include('partials/messages', { messages: { error: messages } }) %>
+
+<section class="page-section page-shell">
+  <article class="card card--plain empty-state">
+    <p class="muted">Access is limited to approved team members. Your Google sign-in keeps things secure for everyone.</p>
+    <div class="action-row">
+      <a href="/auth/google" class="btn btn-primary">Sign in with Google</a>
+      <a href="/events" class="btn btn-ghost">Back to opportunities</a>
+    </div>
+  </article>
+</section>
+
+<%- include('partials/footer') %>

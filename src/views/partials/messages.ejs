@@ -1,0 +1,25 @@
+<% if (messages.error && messages.error.length > 0) { %>
+  <div class="notice-wrapper">
+    <section class="notice notice--error" role="alert">
+      <p class="notice__title">We hit a snag:</p>
+      <ul class="notice__list">
+        <% messages.error.forEach(msg => { %>
+          <li><%= msg %></li>
+        <% }) %>
+      </ul>
+    </section>
+  </div>
+<% } %>
+
+<% if (messages.success && messages.success.length > 0) { %>
+  <div class="notice-wrapper">
+    <section class="notice notice--success" role="status">
+      <p class="notice__title">Success!</p>
+      <ul class="notice__list">
+        <% messages.success.forEach(msg => { %>
+          <li><%= msg %></li>
+        <% }) %>
+      </ul>
+    </section>
+  </div>
+<% } %>

@@ -1,0 +1,19 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <h1>No volunteer opportunities right now</h1>
+    <p class="page-subtitle">We’re preparing the next serving opportunities. Check back soon.</p>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain empty-state">
+    <p class="muted">We’re not currently accepting volunteers. Check back soon or reach out if you’d like to help.</p>
+    <div class="action-row">
+      <a href="/events" class="btn btn-primary">Refresh opportunities</a>
+    </div>
+  </article>
+</section>
+
+<%- include('../partials/footer') %>

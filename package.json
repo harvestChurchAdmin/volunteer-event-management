@@ -1,0 +1,35 @@
+{
+  "name": "harvest-volunteer-system",
+  "version": "1.0.0",
+  "description": "Volunteer Management System for Harvest Church",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "cross-env NODE_ENV=production node src/server.js",
+    "dev": "cross-env NODE_ENV=development nodemon src/server.js",
+    "init-db": "node -e \"require('./src/config/database').initDatabase()\""
+  },
+  "author": "Harvest Church Tech Team",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.1.2",
+    "connect-flash": "^0.1.1",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-session": "^1.18.0",
+    "express-validator": "^7.1.0",
+    "helmet": "^7.1.0",
+    "http-errors": "^2.0.0",
+    "nodemailer": "^6.9.13",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "jsdom": "^22.1.0",
+    "morgan": "^1.10.0",
+    "nodemon": "^3.1.4",
+    "puppeteer": "^24.23.0"
+  }
+}

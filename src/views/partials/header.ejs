@@ -1,0 +1,60 @@
+<%
+  const variant = typeof layoutVariant !== 'undefined' ? layoutVariant : 'public';
+  const pageTitle = title || 'Harvest Event Opportunities';
+  const accountDisplay = user ? (user.displayName || user.email || '') : '';
+  const accountInitial = accountDisplay ? accountDisplay.trim().charAt(0).toUpperCase() : 'A';
+%>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title><%= pageTitle %> · Harvest Event Opportunities</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Coordinate and manage Harvest event volunteer opportunities with a refreshed, accessible experience.">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" type="image/png" href="https://tithely-media-prod.s3.us-west-1.wasabisys.com/704257/FavIcon-Color.png">
+</head>
+<body class="app-shell is-<%= variant %>">
+<header class="topbar">
+  <div class="topbar__inner">
+    <a class="topbar__brand" href="/" aria-label="Harvest Event Opportunities home">
+      <img class="topbar__logo-image" src="https://tithely-media-prod.s3.us-west-1.wasabisys.com/751127/podcast-logo-black.png" alt="Harvest Event Opportunities logo">
+      <span class="topbar__text">
+        <span class="topbar__title">Harvest Event Opportunities</span>
+      </span>
+    </a>
+    <button class="topbar__toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="primary-nav">
+      <span class="sr-only">Toggle navigation</span>
+      <span class="topbar__toggle-icon" aria-hidden="true"></span>
+    </button>
+    <nav id="primary-nav" class="topbar__nav" data-nav data-nav-state="closed">
+      <ul class="topbar__menu">
+        <li><a href="/events">Opportunities</a></li>
+        <% if (user) { %>
+          <li><a href="/admin/dashboard">Admin Dashboard</a></li>
+        <% } %>
+      </ul>
+    </nav>
+    <div class="topbar__actions" aria-label="Account actions">
+      <% if (user) { %>
+        <details class="account-menu">
+          <summary class="account-summary">
+            <span class="account-initials" aria-hidden="true"><%= accountInitial %></span>
+            <span class="sr-only">Open administrator menu</span>
+          </summary>
+          <div class="account-menu__body">
+            <p class="account-menu__name">
+              Signed in as<br>
+              <strong><%= accountDisplay %></strong>
+            </p>
+            <a class="account-menu__link" href="/admin/dashboard">Admin Dashboard</a>
+            <a class="account-menu__link" href="/logout">Logout</a>
+          </div>
+        </details>
+      <% } else { %>
+        <a class="btn btn-primary" href="/auth/google">Admin Login</a>
+      <% } %>
+    </div>
+  </div>
+</header>
+<main class="app-main">

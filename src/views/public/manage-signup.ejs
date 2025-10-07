@@ -1,0 +1,102 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <a href="/events" class="btn-link">&larr; Back to events</a>
+    <h1>Manage your signup for <%= event.name %></h1>
+    <p class="page-subtitle">Update or cancel your reserved slots below and click “Save changes” when you are done.</p>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <% if (messages.error && messages.error.length) { %>
+    <div class="notice-wrapper">
+      <section class="notice notice--error" role="alert">
+        <p class="notice__title">We hit a snag:</p>
+        <ul class="notice__list">
+          <% messages.error.forEach(msg => { %>
+            <li><%= msg %></li>
+          <% }) %>
+        </ul>
+      </section>
+    </div>
+  <% } %>
+  <article class="card card--plain">
+    <% if (messages.success && messages.success.length) { %>
+      <section class="notice notice--success" role="status" style="margin-bottom:1rem;">
+        <ul class="notice__list">
+          <% messages.success.forEach(msg => { %>
+            <li><%= msg %></li>
+          <% }) %>
+        </ul>
+      </section>
+    <% } %>
+    <p>Event runs from <strong><%= helpers.fmt12(event.date_start) %></strong> to <strong><%= helpers.fmt12(event.date_end) %></strong>.</p>
+    <p class="muted">Your confirmation email contains this page’s link if you need it later.</p>
+  </article>
+</section>
+
+<section class="page-section page-shell">
+  <div class="station-grid">
+    <% event.stations.forEach(station => { %>
+      <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
+      <% if (blocks.length > 0) { %>
+        <article class="card station-card">
+          <div class="card-header">
+            <div>
+              <h2>Station: <%= station.name %></h2>
+              <% if (station.description) { %>
+                <p class="station-card__meta"><%= station.description %></p>
+              <% } %>
+            </div>
+          </div>
+          <ul class="time-block-list">
+            <% blocks.forEach(block => { %>
+              <% const isSelected = Array.isArray(selectedBlockIds) && selectedBlockIds.includes(block.block_id); %>
+              <li
+                class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %>"
+                data-block-id="<%= block.block_id %>"
+                data-start-time="<%= block.start_time %>"
+                data-end-time="<%= block.end_time %>"
+                data-is-full="<%= !!block.is_full && !isSelected %>"
+                role="button"
+                aria-pressed="<%= isSelected ? 'true' : 'false' %>"
+                tabindex="<%= block.is_full && !isSelected ? -1 : 0 %>"
+              >
+                <div>
+                  <strong><%= helpers.fmt12(block.start_time) %></strong>
+                  <span>&nbsp;–&nbsp;</span>
+                  <strong><%= helpers.fmt12(block.end_time) %></strong>
+                  <span class="muted"> • Capacity needed: <%= block.capacity_needed %></span>
+                  <span class="muted"> • Signed up: <%= block.reserved_count || 0 %></span>
+                </div>
+                <div>
+                  <% if (block.is_full && !isSelected) { %>
+                    <span class="badge">Full</span>
+                  <% } else { %>
+                    <button type="button" class="btn btn-ghost select-slot-btn"><%= isSelected ? 'Selected' : 'Select' %></button>
+                  <% } %>
+                </div>
+              </li>
+            <% }) %>
+          </ul>
+        </article>
+      <% } %>
+    <% }) %>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <div id="signup-form" class="card card--plain signup-panel" style="display:block;">
+    <div id="selected-slots-container"></div>
+    <h2>Save your changes</h2>
+    <p class="muted">Select or deselect any slots above, then save. You can also remove all slots to cancel your signup.</p>
+    <form id="signupFormTag" action="/manage/<%= token %>" method="POST" novalidate data-mode="manage">
+      <div class="card-actions">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>

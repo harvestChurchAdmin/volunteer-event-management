@@ -1,0 +1,71 @@
+<%
+const helpers = require('../helpers');
+const fmt12 = helpers.fmt12;
+const canonicalLocal = helpers.canonicalLocal;
+%>
+
+<div class="card">
+  <h2><%= event.name %></h2>
+  <% if (event.description) { %><p><%= event.description %></p><% } %>
+  <p><strong><%= fmt12(event.date_start) %></strong> – <strong><%= fmt12(event.date_end) %></strong></p>
+</div>
+
+<%- include('../partials/messages', { messages: messages }) %>
+
+<%
+  const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
+  const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0);
+%>
+
+<% if (hasTimeBlocks) { %>
+  <% stations.forEach(station => { %>
+    <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
+    <% if (blocks.length > 0) { %>
+      <div class="station-group card">
+        <h3>Station: <%= station.name %></h3>
+        <% if (station.description) { %><p><%= station.description %></p><% } %>
+        <ul class="time-block-list">
+          <% blocks.forEach(block => { %>
+            <li
+              class="time-block-item <%= block.is_full ? 'is-full' : '' %>"
+              data-block-id="<%= block.block_id %>"
+              data-start-time="<%= block.start_time %>"
+              data-end-time="<%= block.end_time %>"
+              data-is-full="<%= !!block.is_full %>"
+            >
+              <div>
+                <strong><%= fmt12(block.start_time) %></strong>
+                &nbsp;–&nbsp;
+                <%= fmt12(block.end_time) %>
+                <span> • Capacity Needed: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
+              </div>
+              <div>
+                <% if (block.is_full) { %>
+                  <span class="badge">Full</span>
+                <% } else { %>
+                  <button type="button" class="btn select-slot-btn">Select</button>
+                <% } %>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+  <% }) %>
+
+  <div id="signup-form" class="card" style="display:none;">
+    <div id="selected-slots-container"></div>
+    <h3>Enter Your Information to Confirm</h3>
+    <form id="signupFormTag" action="/signup" method="POST" novalidate>
+      <input type="hidden" name="eventId" value="<%= event.event_id %>">
+      <input type="text" name="name" placeholder="Full Name" required>
+      <input type="email" name="email" placeholder="Email Address" required>
+      <input type="text" name="phone" placeholder="Phone Number" required>
+      <button type="submit" class="btn btn-primary">Confirm My Spot(s)</button>
+    </form>
+  </div>
+<% } else { %>
+  <div class="card">
+    <p>There are no volunteer slots available for this event yet. Please check back later!</p>
+  </div>
+<% } %>

@@ -1,0 +1,33 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <% if (alreadyRegistered) { %>
+      <h1>You're already on the schedule</h1>
+      <p class="page-subtitle">It looks like you were already signed up. We’ve resent your manage link for convenience.</p>
+    <% } else { %>
+      <h1>Thank you for stepping up!</h1>
+      <p class="page-subtitle">We’ve locked in your volunteer spot and will see you soon.</p>
+    <% } %>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain empty-state">
+    <% if (alreadyRegistered) { %>
+      <h2>We’ve got you covered</h2>
+      <p>You were already registered for your selected slots. We just resent the manage link to <strong><%= volunteerEmail %></strong>. If you don’t see it, please check your junk or spam folder.</p>
+    <% } else { %>
+      <h2>You're all set 🎉</h2>
+      <p>You reserved <strong><%= count %></strong> <%= count === 1 ? 'slot' : 'slots' %>. A confirmation email is on its way.</p>
+    <% } %>
+    <div class="action-row">
+      <a href="/events" class="btn btn-primary">Browse more opportunities</a>
+      <% if (typeof manageUrl !== 'undefined' && manageUrl) { %>
+        <a href="<%= manageUrl %>" class="btn btn-ghost">Manage my signup</a>
+      <% } %>
+    </div>
+  </article>
+</section>
+
+<%- include('../partials/footer') %>

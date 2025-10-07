@@ -17,13 +17,17 @@ if (isArrayDescriptor && typeof isArrayDescriptor.get === 'function') {
 
 const app = require('./app');
 const { initDatabase } = require('./config/database');
-const logger = require('morgan');
 
 const PORT = process.env.PORT || 3002;
 
-// Add request logging in development.
+// Add request logging in development without forcing morgan in prod installs.
 if (process.env.NODE_ENV === 'development') {
-    app.use(logger('dev'));
+    try {
+        const morgan = require('morgan');
+        app.use(morgan('dev'));
+    } catch (err) {
+        console.warn('Morgan is not installed; skipping HTTP request logging.');
+    }
 }
 
 // Initialize the database schema if it doesn't exist.

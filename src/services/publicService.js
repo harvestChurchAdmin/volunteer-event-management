@@ -44,10 +44,14 @@ function mapEventRows(rows) {
   rows.forEach(row => {
     if (!row.station_id) return;
     if (!stationMap.has(row.station_id)) {
+      const about = row.station_description_overview || row.station_description || row.s_description || '';
+      const duties = row.station_description_tasks || '';
       stationMap.set(row.station_id, {
         station_id: row.station_id,
         name: row.station_name || row.s_name || row.name,
-        description: row.station_description || row.s_description || '',
+        about,
+        duties,
+        description: about,
         time_blocks: []
       });
     }
@@ -154,9 +158,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
       to: volunteer.email,
       subject,
       text,
-      html,
-      from: process.env.MAIL_FROM || 'noreply@harvestchurch.ca',
-      replyTo: process.env.MAIL_REPLY_TO || 'admin@harvestchurch.ca'
+      html
     });
   } catch (err) {
     console.error('Failed to send volunteer confirmation email:', err);

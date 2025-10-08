@@ -45,6 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const signupForm = document.getElementById('signupFormTag');
     const selectedSlotsContainer = document.getElementById('selected-slots-container');
     const isManageMode = signupForm && signupForm.getAttribute('data-mode') === 'manage';
+    const viewModeSelect = document.getElementById('slot-view-mode');
+    const stationView = document.getElementById('slots-by-station');
+    const timeView = document.getElementById('slots-by-time');
+    const timeViewList = document.getElementById('slots-by-time-list');
+    const selectionFab = document.getElementById('selection-fab');
+    const selectionFabButton = selectionFab ? selectionFab.querySelector('button') : null;
 
     if (!timeBlockItems.length || !signupFormContainer || !signupForm || !selectedSlotsContainer) {
       console.debug('[VolunteerUI] No volunteer UI elements detected on this page.');
@@ -57,25 +63,208 @@ document.addEventListener('DOMContentLoaded', () => {
         blockId: el.getAttribute('data-block-id'),
         start: el.getAttribute('data-start-time'),
         end: el.getAttribute('data-end-time'),
-        isFull: el.getAttribute('data-is-full')
+        isFull: el.getAttribute('data-is-full'),
+        station: el.getAttribute('data-station-name')
       });
     });
 
-    // State: selected slots -> we store the blockId and the exact display text we show the user.
-    let selectedSlots = []; // { id, displayText }
+    // State: selected slots -> we store metadata needed for conflicts and rendering.
+    let selectedSlots = []; // { id, displayText, start, end, stationId, stationName }
+    const originalPlacement = new Map(); // blockId -> { parent, placeholder }
+
+    function updateSelectionFabVisibility() {
+      if (!selectionFab) return;
+      const rect = signupFormContainer.getBoundingClientRect();
+      const beforeForm = rect.top - 120 > window.innerHeight;
+      if (selectedSlots.length > 0 && beforeForm) {
+        selectionFab.hidden = false;
+        selectionFab.classList.add('is-visible');
+        selectionFab.setAttribute('aria-hidden', 'false');
+      } else {
+        selectionFab.classList.remove('is-visible');
+        selectionFab.hidden = true;
+        selectionFab.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    if (selectionFabButton) {
+      selectionFabButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        try {
+          signupFormContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          signupFormContainer.scrollIntoView();
+        }
+        setTimeout(() => {
+          const focusTarget =
+            signupForm.querySelector('input:not([type="hidden"]), select, textarea');
+          if (focusTarget && typeof focusTarget.focus === 'function') {
+            focusTarget.focus({ preventScroll: true });
+          }
+        }, 420);
+      });
+    }
+    if (selectionFab) {
+      selectionFab.setAttribute('aria-hidden', 'true');
+      const onScroll = () => updateSelectionFabVisibility();
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      updateSelectionFabVisibility();
+    }
+
+    timeBlockItems.forEach(item => {
+      if (typeof item.dataset.originalTabindex === 'undefined') {
+        const existingTabIndex = item.getAttribute('tabindex');
+        item.dataset.originalTabindex = existingTabIndex !== null ? existingTabIndex : '0';
+      }
+    });
+
+    function computeTimestamp(raw) {
+      if (!raw) return Number.NaN;
+      let date = new Date(raw);
+      if (Number.isNaN(date.getTime())) {
+        date = new Date(raw.replace(' ', 'T'));
+      }
+      if (Number.isNaN(date.getTime())) {
+        date = new Date(raw.replace(' ', 'T') + 'Z');
+      }
+      const time = date.getTime();
+      return Number.isNaN(time) ? Number.NaN : time;
+    }
+
+    function getSlotMeta(item) {
+      const id = item.getAttribute('data-block-id') || '';
+      const stationId = item.getAttribute('data-station-id') || '';
+      const stationName = item.getAttribute('data-station-name') || '';
+      const startRaw = item.getAttribute('data-start-time');
+      const endRaw = item.getAttribute('data-end-time');
+      if (typeof item.dataset.startTs === 'undefined') {
+        item.dataset.startTs = String(computeTimestamp(startRaw));
+      }
+      if (typeof item.dataset.endTs === 'undefined') {
+        item.dataset.endTs = String(computeTimestamp(endRaw));
+      }
+      return {
+        id,
+        stationId,
+        stationName,
+        start: Number(item.dataset.startTs),
+        end: Number(item.dataset.endTs)
+      };
+    }
 
     function getDisplayTextFromItem(item) {
-      // We’ll build the same line the user sees in the list item:
-      // e.g., "Fri, Oct 31 @ 05:00 PM – 09:00 PM"
-      const infoDiv = item.querySelector('div'); // first div holds the time text we render on the server
+      const infoDiv = item.querySelector('div');
       if (!infoDiv) return '(unknown time)';
-      // Extract text content from that div only
       const text = infoDiv.textContent || infoDiv.innerText || '';
-      // The text includes "• Capacity Needed: X"; strip that off for the Selected Times summary.
       const lower = text.toLowerCase();
       const marker = '• capacity needed';
       const idx = lower.indexOf(marker);
-      return idx >= 0 ? text.slice(0, idx).trim() : text.trim();
+      let clean = idx >= 0 ? text.slice(0, idx).trim() : text.trim();
+      const stationName = item.getAttribute('data-station-name');
+      if (stationName) {
+        const label = `Station: ${stationName}`;
+        if (clean.startsWith(label)) {
+          clean = clean.slice(label.length).trim();
+        } else {
+          clean = clean.replace(/^Station:\s*[^–]+/i, '').trim();
+        }
+        return `${stationName} — ${clean}`;
+      }
+      return clean;
+    }
+
+    function formatSlotForMessage(slot) {
+      if (!slot) return '(unknown)';
+      if (slot.displayText) return slot.displayText;
+      const parts = [];
+      if (slot.stationName) parts.push(slot.stationName);
+      return parts.length ? parts.join(' — ') : '(unknown)';
+    }
+
+    function slotsOverlap(a, b) {
+      if (!a || !b) return false;
+      if (!Number.isFinite(a.start) || !Number.isFinite(a.end) || !Number.isFinite(b.start) || !Number.isFinite(b.end)) {
+        return false;
+      }
+      return a.start < b.end && b.start < a.end;
+    }
+
+    function markConflictState(item, conflicts) {
+      const button = item.querySelector('.select-slot-btn');
+      const note = item.querySelector('[data-role="conflict-note"]');
+      const baseIsFull = item.getAttribute('data-is-full') === 'true' || item.classList.contains('is-full');
+      const isSelected = item.classList.contains('selected');
+
+      if (isSelected) {
+        item.classList.remove('disabled-overlap');
+        item.setAttribute('aria-disabled', 'false');
+        item.setAttribute('aria-pressed', 'true');
+        const originalTab = item.dataset.originalTabindex || '0';
+        item.setAttribute('tabindex', originalTab);
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Selected';
+        }
+        if (note) {
+          note.textContent = '';
+          note.hidden = true;
+        }
+        return;
+      }
+
+      if (conflicts.length) {
+        item.classList.add('disabled-overlap');
+        item.setAttribute('aria-disabled', 'true');
+        item.setAttribute('aria-pressed', 'false');
+        item.setAttribute('tabindex', '-1');
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Conflict';
+        }
+        if (note) {
+          const message = conflicts.length === 1
+            ? `Conflicts with ${formatSlotForMessage(conflicts[0])}`
+            : 'Conflicts with another selected slot';
+          note.textContent = message;
+          note.hidden = false;
+        }
+        return;
+      }
+
+      item.classList.remove('disabled-overlap');
+      item.setAttribute('aria-pressed', 'false');
+      if (!baseIsFull) {
+        item.setAttribute('aria-disabled', 'false');
+        const originalTab = item.dataset.originalTabindex || '0';
+        item.setAttribute('tabindex', originalTab);
+        if (button) {
+          button.disabled = false;
+          button.textContent = item.classList.contains('selected') ? 'Selected' : 'Select';
+        }
+      }
+      if (note) {
+        note.textContent = '';
+        note.hidden = true;
+      }
+    }
+
+    function updateConflictingSlots() {
+      timeBlockItems.forEach(item => {
+        const meta = getSlotMeta(item);
+        const conflicts = selectedSlots.filter(slot => slot.id !== meta.id && slotsOverlap(slot, meta));
+        markConflictState(item, conflicts);
+      });
+    }
+
+    function getVisibleItems() {
+      if (timeView && !timeView.hasAttribute('hidden')) {
+        return Array.from(timeView.querySelectorAll('.time-block-item'));
+      }
+      if (stationView) {
+        return Array.from(stationView.querySelectorAll('.time-block-item'));
+      }
+      return [];
     }
 
     function renderSelectedList() {
@@ -95,21 +284,36 @@ document.addEventListener('DOMContentLoaded', () => {
       const ul = document.createElement('ul');
       selectedSlots.forEach(slot => {
         const li = document.createElement('li');
-        li.textContent = slot.displayText;
+        const text = document.createElement('span');
+        text.textContent = slot.displayText;
+        li.appendChild(text);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'selected-slot-remove';
+        remove.textContent = 'Remove';
+        remove.setAttribute('data-slot-id', slot.id);
+        remove.addEventListener('click', () => {
+          const item = timeBlockItems.find(el => el.getAttribute('data-block-id') === slot.id);
+          if (item) {
+            toggleSlotSelection(item);
+          }
+        });
+        li.appendChild(remove);
+
         ul.appendChild(li);
       });
       selectedSlotsContainer.appendChild(ul);
 
       const hint = document.createElement('p');
       hint.className = 'selected-hint';
-      hint.textContent = 'Scroll to the form whenever you are ready to confirm your selected slots.';
+      hint.textContent = 'Complete the form below to confirm your selected slots.';
       selectedSlotsContainer.appendChild(hint);
 
       console.debug('[VolunteerUI] Selected list rendered:', selectedSlots.map(s => ({ id: s.id, displayText: s.displayText })));
     }
 
     function rebuildHiddenInputs() {
-      // We only need blockIds for the server.
       signupForm.querySelectorAll('input[name="blockIds[]"]').forEach(input => input.remove());
       selectedSlots.forEach(slot => {
         const hidden = document.createElement('input');
@@ -130,26 +334,34 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    function updateSelectionFab() {
+      if (!selectionFab) return;
+      updateSelectionFabVisibility();
+    }
+
     function toggleSlotSelection(item) {
       const id = item.getAttribute('data-block-id');
       if (!id) {
         console.error('[VolunteerUI] Missing data-block-id on time-block-item:', item);
         return;
       }
-      const itemIndex = timeBlockItems.indexOf(item);
+      if (item.classList.contains('disabled-overlap')) {
+        return;
+      }
 
-      const idx = selectedSlots.findIndex(s => s.id === id);
-      if (idx >= 0) {
-        // Deselect
-        selectedSlots.splice(idx, 1);
+      const existingIdx = selectedSlots.findIndex(s => s.id === id);
+      if (existingIdx >= 0) {
+        selectedSlots.splice(existingIdx, 1);
         item.classList.remove('selected');
+        item.classList.remove('disabled-overlap');
         item.setAttribute('aria-pressed', 'false');
         const btn = item.querySelector('.select-slot-btn');
         if (btn) btn.textContent = 'Select';
       } else {
-        // Select using the exact display text shown in the list
+        const slotMeta = getSlotMeta(item);
         const displayText = getDisplayTextFromItem(item);
-        selectedSlots.push({ id, displayText });
+
+        selectedSlots.push({ id, displayText, ...slotMeta });
         item.classList.add('selected');
         item.setAttribute('aria-pressed', 'true');
         const btn = item.querySelector('.select-slot-btn');
@@ -159,14 +371,20 @@ document.addEventListener('DOMContentLoaded', () => {
       renderSelectedList();
       rebuildHiddenInputs();
       updateSignupFormVisibility();
+      updateConflictingSlots();
+      updateSelectionFab();
+
       if (selectedSlots.length > 0 && item.classList.contains('selected')) {
-        for (let offset = 1; offset < timeBlockItems.length; offset += 1) {
-          const candidate = timeBlockItems[(itemIndex + offset) % timeBlockItems.length];
-          if (candidate === item) continue;
-          const disabled = candidate.getAttribute('data-is-full') === 'true' || candidate.classList.contains('is-full');
-          if (!disabled) {
-            candidate.focus();
-            break;
+        const visibleItems = getVisibleItems();
+        const currentIndex = visibleItems.indexOf(item);
+        if (currentIndex >= 0) {
+          for (let idx = currentIndex + 1; idx < visibleItems.length; idx += 1) {
+            const candidate = visibleItems[idx];
+            const disabled = candidate.getAttribute('data-is-full') === 'true' || candidate.classList.contains('is-full');
+            if (!disabled) {
+              candidate.focus();
+              break;
+            }
           }
         }
       }
@@ -182,8 +400,12 @@ document.addEventListener('DOMContentLoaded', () => {
       item.setAttribute('aria-pressed', 'true');
       const button = item.querySelector('.select-slot-btn');
       if (button) button.textContent = 'Selected';
-      selectedSlots.push({ id, displayText: getDisplayTextFromItem(item) });
+      const slotMeta = getSlotMeta(item);
+      selectedSlots.push({ id, displayText: getDisplayTextFromItem(item), ...slotMeta });
     });
+
+    updateConflictingSlots();
+    updateSelectionFab();
 
     if (isManageMode) {
       renderSelectedList();
@@ -193,6 +415,63 @@ document.addEventListener('DOMContentLoaded', () => {
       renderSelectedList();
       rebuildHiddenInputs();
       updateSignupFormVisibility();
+    }
+
+    timeBlockItems.forEach(item => {
+      const id = item.getAttribute('data-block-id');
+      const parent = item.parentElement;
+      if (!id || !parent || originalPlacement.has(id)) return;
+      const placeholder = document.createComment(`slot-placeholder-${id}`);
+      parent.insertBefore(placeholder, item);
+      const meta = getSlotMeta(item);
+      if (!Number.isNaN(meta.start)) item.dataset.startTs = String(meta.start);
+      if (!Number.isNaN(meta.end)) item.dataset.endTs = String(meta.end);
+      originalPlacement.set(id, { parent, placeholder });
+    });
+
+    function applyViewMode(mode) {
+      if (!stationView || !timeView || !timeViewList) return;
+      if (mode === 'time') {
+        stationView.setAttribute('hidden', 'hidden');
+        timeView.removeAttribute('hidden');
+        const sorted = timeBlockItems.slice().sort((a, b) => {
+          const aStart = Number(a.dataset.startTs);
+          const bStart = Number(b.dataset.startTs);
+          if (Number.isNaN(aStart) || Number.isNaN(bStart)) return 0;
+          if (aStart === bStart) return 0;
+          return aStart < bStart ? -1 : 1;
+        });
+        sorted.forEach(item => {
+          const currentParent = item.parentElement;
+          if (currentParent && currentParent !== timeViewList) {
+            currentParent.removeChild(item);
+          }
+          timeViewList.appendChild(item);
+        });
+      } else {
+        timeView.setAttribute('hidden', 'hidden');
+        stationView.removeAttribute('hidden');
+        timeBlockItems.forEach(item => {
+          const id = item.getAttribute('data-block-id');
+          if (!id) return;
+          const placement = originalPlacement.get(id);
+          if (!placement) return;
+          const { parent, placeholder } = placement;
+          if (parent && placeholder && parent.contains(placeholder)) {
+            parent.insertBefore(item, placeholder.nextSibling);
+          } else if (parent) {
+            parent.appendChild(item);
+          }
+        });
+      }
+
+      updateConflictingSlots();
+    }
+
+    if (viewModeSelect && stationView && timeView && timeViewList) {
+      viewModeSelect.addEventListener('change', () => {
+        applyViewMode(viewModeSelect.value === 'time' ? 'time' : 'station');
+      });
     }
 
     // Bind Select buttons and item interactions
@@ -225,6 +504,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
     });
+
+    if (viewModeSelect) {
+      applyViewMode(viewModeSelect.value === 'time' ? 'time' : 'station');
+    }
 
     // Initial render
     updateSignupFormVisibility();

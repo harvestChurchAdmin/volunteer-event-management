@@ -20,6 +20,10 @@ Thumbs.db
 /db/*.db
 /db/*.sqlite
 /db/*.sqlite3
+/db/*.db-journal
+/db/*.sqlite-journal
+/db/*.db-shm
+/db/*.db-wal
 
 # Logs
 logs

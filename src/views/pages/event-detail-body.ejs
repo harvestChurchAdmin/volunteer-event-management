@@ -22,8 +22,27 @@ const canonicalLocal = helpers.canonicalLocal;
     <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
     <% if (blocks.length > 0) { %>
       <div class="station-group card">
-        <h3>Station: <%= station.name %></h3>
-        <% if (station.description) { %><p><%= station.description %></p><% } %>
+        <div class="station-card__title">
+          <h3>Station: <%= station.name %></h3>
+          <% const stationAbout = station.about || station.description || ''; %>
+          <% const stationDuties = station.duties || ''; %>
+          <% if (stationAbout || stationDuties) { %>
+            <div class="station-quick-facts">
+              <% if (stationAbout) { %>
+                <div class="station-quick-fact">
+                  <h4>Description</h4>
+                  <p><%= stationAbout %></p>
+                </div>
+              <% } %>
+              <% if (stationDuties) { %>
+                <div class="station-quick-fact">
+                  <h4>Duties</h4>
+                  <p><%= stationDuties %></p>
+                </div>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
         <ul class="time-block-list">
           <% blocks.forEach(block => { %>
             <li

@@ -2,7 +2,7 @@
     <footer class="site-footer">
       <div class="site-footer__inner">
         <div>
-          <p class="site-footer__title">Harvest Event Opportunities</p>
+          <p class="site-footer__title"><%= (locals.brand && locals.brand.appName) || 'Volunteer Event Manager' %></p>
         </div>
         <div class="site-footer__links">
           <a href="/events">Find Opportunities</a>
@@ -10,12 +10,12 @@
             <a href="/admin/dashboard">Admin Dashboard</a>
             <a href="/logout">Logout</a>
           <% } else { %>
-            <a href="/login">Admin Login</a>
+            <a href="/auth/google">Admin Login</a>
           <% } %>
         </div>
       </div>
       <div class="site-footer__meta">
-        <p>&copy; <%= new Date().getFullYear() %> Harvest Church. All rights reserved.</p>
+        <p>&copy; <%= new Date().getFullYear() %> <%= (locals.brand && locals.brand.copyrightHolder) || 'Your Organization' %>. All rights reserved.</p>
       </div>
     </footer>
     <script src="/js/main.js" defer></script>

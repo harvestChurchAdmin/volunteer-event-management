@@ -1,9 +1,11 @@
 const nodemailer = require('nodemailer');
+const { getBranding } = require('../config/branding');
 
 let cachedTransporter = null;
 
-const DEFAULT_FROM = process.env.MAIL_FROM || 'Harvest Church <noreply@harvestchurch.ca>';
-const DEFAULT_REPLY_TO = process.env.MAIL_REPLY_TO || 'admin@harvestchurch.ca';
+const branding = getBranding();
+const DEFAULT_FROM = process.env.MAIL_FROM || `${branding.orgName} Volunteers <no-reply@example.org>`;
+const DEFAULT_REPLY_TO = process.env.MAIL_REPLY_TO || 'volunteers@example.org';
 
 function createTransporter() {
   if (cachedTransporter) return cachedTransporter;

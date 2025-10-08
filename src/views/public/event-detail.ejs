@@ -29,51 +29,86 @@
 
 <% if (hasTimeBlocks) { %>
   <section class="page-section page-shell">
-    <div class="station-grid">
-      <% stations.forEach(station => { %>
-        <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
-        <% if (blocks.length > 0) { %>
-          <article class="card station-card">
-            <div class="card-header">
-              <div>
+    <div class="slot-toolbar">
+      <div class="slot-toolbar__group">
+        <label class="slot-toolbar__label" for="slot-view-mode">View slots by</label>
+        <select id="slot-view-mode" class="slot-toolbar__select">
+          <option value="station" selected>Station</option>
+          <option value="time">Date &amp; time</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="slots-by-time" class="slot-view slot-view--time" hidden>
+      <ul id="slots-by-time-list" class="time-block-list"></ul>
+    </div>
+
+    <div id="slots-by-station" class="slot-view slot-view--station">
+      <div class="station-grid">
+        <% stations.forEach(station => { %>
+          <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
+          <% if (blocks.length > 0) { %>
+            <article class="card station-card">
+              <div class="card-header">
+              <div class="station-card__title">
                 <h2>Station: <%= station.name %></h2>
-                <% if (station.description) { %>
-                  <p class="station-card__meta"><%= station.description %></p>
-                <% } %>
-              </div>
-            </div>
-            <ul class="time-block-list">
-              <% blocks.forEach(block => { %>
-            <li
-              class="time-block-item <%= block.is_full ? 'is-full' : '' %>"
-              data-block-id="<%= block.block_id %>"
-              data-start-time="<%= block.start_time %>"
-              data-end-time="<%= block.end_time %>"
-              data-is-full="<%= !!block.is_full %>"
-              role="button"
-              aria-pressed="false"
-              tabindex="<%= block.is_full ? -1 : 0 %>"
-            >
-              <div>
-                <strong><%= fmt12(block.start_time) %></strong>
-                    <span>&nbsp;–&nbsp;</span>
-                    <strong><%= fmt12(block.end_time) %></strong>
-                    <span class="muted"> • Capacity needed: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
-                    <span class="muted"> • Signed up: <%= block.reserved_count || 0 %></span>
-                  </div>
-                  <div>
-                    <% if (block.is_full) { %>
-                      <span class="badge">Full</span>
-                    <% } else { %>
-                      <button type="button" class="btn btn-ghost select-slot-btn">Select</button>
+                <% const stationAbout = station.about || station.description || ''; %>
+                <% const stationDuties = station.duties || ''; %>
+                <% if (stationAbout || stationDuties) { %>
+                  <div class="station-quick-facts">
+                    <% if (stationAbout) { %>
+                      <div class="station-quick-fact">
+                        <h3>Description</h3>
+                        <p><%= stationAbout %></p>
+                      </div>
+                    <% } %>
+                    <% if (stationDuties) { %>
+                      <div class="station-quick-fact">
+                        <h3>Duties</h3>
+                        <p><%= stationDuties %></p>
+                      </div>
                     <% } %>
                   </div>
-                </li>
-              <% }) %>
-            </ul>
-          </article>
-        <% } %>
-      <% }) %>
+                <% } %>
+              </div>
+              </div>
+              <ul class="time-block-list">
+                <% blocks.forEach(block => { %>
+                  <li
+                    class="time-block-item <%= block.is_full ? 'is-full' : '' %>"
+                    data-block-id="<%= block.block_id %>"
+                    data-station-id="<%= station.station_id %>"
+                    data-station-name="<%= station.name %>"
+                    data-start-time="<%= block.start_time %>"
+                    data-end-time="<%= block.end_time %>"
+                    data-is-full="<%= !!block.is_full %>"
+                    role="button"
+                    aria-pressed="false"
+                    tabindex="<%= block.is_full ? -1 : 0 %>"
+                  >
+                    <div class="time-block-item__info">
+                      <span class="station-chip muted" data-role="station-chip">Station: <%= station.name %></span>
+                      <strong><%= fmt12(block.start_time) %></strong>
+                      <span>&nbsp;–&nbsp;</span>
+                      <strong><%= fmt12(block.end_time) %></strong>
+                      <span class="muted"> • Capacity needed: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
+                      <span class="muted"> • Signed up: <%= block.reserved_count || 0 %></span>
+                      <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
+                    </div>
+                    <div>
+                      <% if (block.is_full) { %>
+                        <span class="badge">Full</span>
+                      <% } else { %>
+                        <button type="button" class="btn btn-ghost select-slot-btn">Select</button>
+                      <% } %>
+                    </div>
+                  </li>
+                <% }) %>
+              </ul>
+            </article>
+          <% } %>
+        <% }) %>
+      </div>
     </div>
   </section>
 
@@ -117,3 +152,7 @@
 <% } %>
 
 <%- include('../partials/footer') %>
+
+<div id="selection-fab" class="selection-fab" hidden>
+  <button type="button" class="selection-fab__button">Review selected slots</button>
+</div>

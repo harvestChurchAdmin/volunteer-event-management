@@ -1,0 +1,37 @@
+// src/config/branding.js
+// -----------------------------------------------------------------------------
+// Centralized helper for branding-related values. All user-facing copy that
+// references the hosting organization should flow through here rather than
+// being hard-coded inside templates or services.
+
+function clean(value) {
+  if (!value) return '';
+  const trimmed = String(value).trim();
+  return trimmed.length ? trimmed : '';
+}
+
+function getBranding() {
+  const appName = clean(process.env.APP_NAME) || 'Volunteer Event Manager';
+  const orgName = clean(process.env.ORG_DISPLAY_NAME) || 'Your Organization';
+  const copyrightHolder = clean(process.env.ORG_COPYRIGHT_HOLDER) || orgName;
+  const tagline =
+    clean(process.env.APP_TAGLINE) ||
+    'Coordinate volunteer opportunities with an accessible experience.';
+  const logoUrl = clean(process.env.BRAND_LOGO_URL) || null;
+  const faviconUrl = clean(process.env.BRAND_FAVICON_URL) || null;
+  const homePath = clean(process.env.BRAND_HOME_PATH) || '/';
+
+  return {
+    appName,
+    appTagline: tagline,
+    orgName,
+    copyrightHolder,
+    logoUrl,
+    faviconUrl,
+    homePath,
+  };
+}
+
+module.exports = {
+  getBranding,
+};

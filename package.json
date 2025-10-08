@@ -1,14 +1,14 @@
 {
-  "name": "harvest-volunteer-system",
+  "name": "volunteer-event-manager",
   "version": "1.0.0",
-  "description": "Volunteer Management System for Harvest Church",
+  "description": "Volunteer event management workflow for churches and community organizations.",
   "main": "src/server.js",
   "scripts": {
     "start": "cross-env NODE_ENV=production node src/server.js",
     "dev": "cross-env NODE_ENV=development nodemon src/server.js",
     "init-db": "node -e \"require('./src/config/database').initDatabase()\""
   },
-  "author": "Harvest Church Tech Team",
+  "author": "Community Contributors",
   "license": "ISC",
   "dependencies": {
     "better-sqlite3": "^11.1.2",

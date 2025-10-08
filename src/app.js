@@ -12,6 +12,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const createError = require('http-errors');
 const flash = require('connect-flash');
+const { getBranding } = require('./config/branding');
 
 require('./config/passport-setup');
 
@@ -24,6 +25,17 @@ app.set('trust proxy', 1);
 
 app.get('/favicon.ico', (req, res) => res.status(204).send());
 
+const brandingForCsp = getBranding();
+const imgSrc = ["'self'", 'data:'];
+const appendHost = (url) => {
+    try {
+        const { origin } = new URL(url);
+        if (origin && !imgSrc.includes(origin)) imgSrc.push(origin);
+    } catch (_) { /* ignore invalid URLs */ }
+};
+if (brandingForCsp.logoUrl) appendHost(brandingForCsp.logoUrl);
+if (brandingForCsp.faviconUrl) appendHost(brandingForCsp.faviconUrl);
+
 // Baseline security headers. Only the assets that truly need to be third-party hosted
 // are permitted in the CSP declarations below.
 app.use(helmet({
@@ -31,7 +43,7 @@ app.use(helmet({
         directives: {
             "script-src": ["'self'", "https://cdn.jsdelivr.net"],
             "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-            "img-src": ["'self'", "data:", "https://tithely-media-prod.s3.us-west-1.wasabisys.com"],
+            "img-src": imgSrc,
         },
     },
 }));
@@ -57,6 +69,12 @@ app.use(session({
 app.use(flash());
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Attach branding information to every response so views can render dynamic titles.
+app.use((req, res, next) => {
+    res.locals.brand = getBranding();
+    next();
+});
 
 // Expose user and flash messages to all views
 // Make the authenticated user and any flash messages available to all templates.

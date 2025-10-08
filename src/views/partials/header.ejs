@@ -1,6 +1,13 @@
 <%
+  const brand = locals.brand || {};
   const variant = typeof layoutVariant !== 'undefined' ? layoutVariant : 'public';
-  const pageTitle = title || 'Harvest Event Opportunities';
+  const appName = brand.appName || 'Volunteer Event Manager';
+  const pageTitle = title || appName;
+  const tagline = brand.appTagline || 'Coordinate volunteer opportunities with an accessible experience.';
+  const faviconUrl = brand.faviconUrl;
+  const logoUrl = brand.logoUrl;
+  const homePath = brand.homePath || '/';
+  const fullTitle = pageTitle === appName ? appName : `${pageTitle} · ${appName}`;
   const accountDisplay = user ? (user.displayName || user.email || '') : '';
   const accountInitial = accountDisplay ? accountDisplay.trim().charAt(0).toUpperCase() : 'A';
 %>
@@ -8,19 +15,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title><%= pageTitle %> · Harvest Event Opportunities</title>
+  <title><%= fullTitle %></title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Coordinate and manage Harvest event volunteer opportunities with a refreshed, accessible experience.">
+  <meta name="description" content="<%= tagline %>">
   <link rel="stylesheet" href="/css/style.css">
-  <link rel="icon" type="image/png" href="https://tithely-media-prod.s3.us-west-1.wasabisys.com/704257/FavIcon-Color.png">
+  <% if (faviconUrl) { %>
+    <link rel="icon" type="image/png" href="<%= faviconUrl %>">
+  <% } %>
 </head>
 <body class="app-shell is-<%= variant %>">
 <header class="topbar">
   <div class="topbar__inner">
-    <a class="topbar__brand" href="/" aria-label="Harvest Event Opportunities home">
-      <img class="topbar__logo-image" src="https://tithely-media-prod.s3.us-west-1.wasabisys.com/751127/podcast-logo-black.png" alt="Harvest Event Opportunities logo">
+    <a class="topbar__brand" href="<%= homePath %>" aria-label="<%= appName %> home">
+      <% if (logoUrl) { %>
+        <img class="topbar__logo-image" src="<%= logoUrl %>" alt="<%= appName %> logo">
+      <% } %>
       <span class="topbar__text">
-        <span class="topbar__title">Harvest Event Opportunities</span>
+        <span class="topbar__title"><%= appName %></span>
       </span>
     </a>
     <button class="topbar__toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="primary-nav">

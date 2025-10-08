@@ -4,16 +4,18 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { isAuthenticated } = require('../middleware/authMiddleware');
 
-// Dashboard & event detail
+// Dashboard & event detail ----------------------------------------------------
 router.get('/dashboard', isAuthenticated, adminController.showDashboard);
 router.get('/event/:eventId', isAuthenticated, adminController.showEventDetail);
 
-// Create
+// Create ----------------------------------------------------------------------
 router.post('/event', isAuthenticated, adminController.createEvent);
 router.post('/event/:eventId/stations', isAuthenticated, adminController.createStation);
+// Reorder stations via AJAX from admin UI
+router.post('/event/:eventId/stations/reorder', isAuthenticated, adminController.reorderStations);
 router.post('/station/:stationId/blocks', isAuthenticated, adminController.createTimeBlock);
 
-// Update
+// Update ----------------------------------------------------------------------
 router.post('/event/:eventId/edit', isAuthenticated, adminController.updateEvent);
 router.post('/event/:eventId/publish', isAuthenticated, adminController.setPublish);
 router.post('/station/:stationId/edit', isAuthenticated, adminController.updateStation);
@@ -22,7 +24,7 @@ router.post('/block/:blockId/reservations', isAuthenticated, adminController.add
 router.post('/reservation/:reservationId/edit', isAuthenticated, adminController.updateReservation);
 router.post('/reservation/:reservationId/delete', isAuthenticated, adminController.deleteReservation);
 
-// Delete
+// Delete ----------------------------------------------------------------------
 router.post('/event/:eventId/delete', isAuthenticated, adminController.deleteEvent);
 router.post('/station/:stationId/delete', isAuthenticated, adminController.deleteStation);
 router.post('/block/:blockId/delete', isAuthenticated, adminController.deleteTimeBlock);

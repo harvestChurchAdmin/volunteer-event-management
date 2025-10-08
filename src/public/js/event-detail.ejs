@@ -1,11 +1,5 @@
 <%- include('../partials/header', { title, user: locals.user, layoutVariant: 'admin' }) %>
 
-<!--
-  Admin Event Detail
-  Provides a single page view for managing stations, time blocks, and volunteer
-  reservations. Helper functions below keep the presentation logic tidy.
--->
-
 <%
 function parseLocalDate(txt) {
   if (!txt) return null;
@@ -56,7 +50,6 @@ function toTimestamp(txt) {
 }
 %>
 
-<!-- Page header: core event metadata + publish/delete actions -->
 <section class="page-header page-shell">
   <div>
     <a href="/admin/dashboard" class="btn-link">&larr; Back to dashboard</a>
@@ -87,7 +80,6 @@ function toTimestamp(txt) {
   const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
 %>
 
-<!-- Stations: listing + management modals -->
 <section class="page-section page-shell">
   <div class="section-header">
     <h2>Stations</h2>
@@ -361,7 +353,7 @@ function toTimestamp(txt) {
             </div>
             <div class="form-group">
               <label for="station-about-<%= station.station_id %>">Station description</label>
-              <textarea id="station-about-<%= station.station_id %>" name="about" rows="3" placeholder="Describe the purpose of this station"><%= station.about || station.description || '' %></textarea>
+              <textarea id="station-about-<%= station.station_id %>" name="about" rows="3" placeholder="Describe the the station"><%= station.about || station.description || '' %></textarea>
             </div>
             <div class="form-group">
               <label for="station-duties-<%= station.station_id %>">Volunteer duties</label>

@@ -1,5 +1,6 @@
 // src/public/js/admin-event-detail.js
-// JS for Admin Event Detail page — CSP-safe (no inline JS)
+// Client-side behaviour for the admin event detail page. Everything lives in an
+// IIFE to keep the global scope clean and to remain CSP friendly (no inline JS).
 
 (function() {
   function qs(sel, root = document) { return root.querySelector(sel); }
@@ -7,10 +8,18 @@
 
   const modalOpener = new WeakMap();
 
+  // Helpers ------------------------------------------------------------------
+  /**
+   * Pad a number with a leading zero (used for datetime components).
+   */
   function pad2(value) {
     return String(value).padStart(2, '0');
   }
 
+  /**
+   * Convert a `<input type="datetime-local">` compatible value into the canonical
+   * format used by the backend (`YYYY-MM-DD HH:mm`).
+   */
   function canonicalFromLocal(value) {
     if (!value) return '';
     if (value.includes('T')) {
@@ -26,6 +35,9 @@
     return '';
   }
 
+  /**
+   * Convert canonical DB-friendly text to a value the datetime-local input can show.
+   */
   function localFromCanonical(value) {
     if (!value) return '';
     if (value.includes('T')) {
@@ -40,6 +52,10 @@
     return '';
   }
 
+  /**
+   * Convert either canonical text or datetime-local value into a timestamp so we
+   * can compare ordering without Date.parse guessing.
+   */
   function toTimestamp(value) {
     if (!value) return NaN;
     const canonical = canonicalFromLocal(value);
@@ -49,6 +65,10 @@
     return new Date(+y, +mo - 1, +d, +h, +mi).getTime();
   }
 
+  /**
+   * Display a modal, optionally remembering the element that triggered it so
+   * focus can be restored after closing.
+   */
   function openModal(modal, opener) {
     if (!modal) return;
     if (opener) modalOpener.set(modal, opener);
@@ -97,6 +117,9 @@
     document.addEventListener('keydown', trapHandler);
   }
 
+  /**
+   * Hide the modal, tear down focus trapping, and return focus to the opener.
+   */
   function closeModal(modal) {
     if (!modal) return;
     modal.style.display = 'none';
@@ -129,6 +152,9 @@
     if (opener && typeof opener.focus === 'function') opener.focus();
   }
 
+  /**
+   * Render a bullet list of validation errors in the provided container.
+   */
   function showErrors(container, messages) {
     if (!container) return;
     container.innerHTML = '';
@@ -143,6 +169,9 @@
     container.classList.add('notice', 'notice--error', 'form-errors');
   }
 
+  /**
+   * Copy visible datetime values into hidden canonical fields prior to submit.
+   */
   function syncFormDatetimes(form) {
     if (!form) return;
     qsa('.datetime-field', form).forEach(field => {
@@ -154,6 +183,10 @@
     });
   }
 
+  /**
+   * Attach datetime-field behaviour to inputs within `root`. Handles syncing
+   * between visible datetime-local inputs and hidden canonical fields.
+   */
   function initDatetimeFields(root = document) {
     qsa('.datetime-field', root).forEach(field => {
       if (field._datetimeInit) return;
@@ -235,6 +268,7 @@
     const timeBlockForm = qs('#timeBlockForm');
     const timeBlockErrors = qs('#timeBlockErrors');
 
+    // Modal openers ----------------------------------------------------------
     qsa('[data-open]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         const selector = btn.getAttribute('data-open');
@@ -271,10 +305,22 @@
       });
     });
 
-    // Client-side validation for new time block form
+    // Client-side validation for new time block form -------------------------
     if (timeBlockForm) {
       timeBlockForm.addEventListener('submit', function(e) {
         syncFormDatetimes(timeBlockForm);
+        // Preserve scroll position across full page submit so user returns to same spot
+        try {
+          sessionStorage.setItem('admin:scrollY', String(window.scrollY || window.pageYOffset || 0));
+          const addAnother = document.getElementById('timeblock-add-another');
+          if (addAnother && addAnother.checked) {
+            // record station-id so we can re-open after reload
+            const stationId = timeBlockForm.querySelector('input[name="station-id"]')?.value || timeBlockForm.querySelector('input[name="station_id"]')?.value;
+            if (stationId) sessionStorage.setItem('admin:openAddTimeBlock', String(stationId));
+          } else {
+            sessionStorage.removeItem('admin:openAddTimeBlock');
+          }
+        } catch (err) { /* ignore sessionStorage errors */ }
         const errors = [];
         const start = qs('input[name="start_time"]', timeBlockForm)?.value?.trim();
         const end = qs('input[name="end_time"]', timeBlockForm)?.value?.trim();
@@ -307,7 +353,7 @@
       });
     }
 
-    // Confirmation prompts
+    // Confirmation prompts ---------------------------------------------------
     const confirmState = {
       modal: null,
       messageNode: null,
@@ -380,7 +426,7 @@
       });
     });
 
-    // Close buttons (any element with data-close attribute)
+    // Close buttons (any element with data-close attribute) ------------------
     qsa('[data-close]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         const selector = btn.getAttribute('data-close');
@@ -389,18 +435,233 @@
       });
     });
 
-    // Click outside to close
+    // Click outside to close -------------------------------------------------
     qsa('.modal').forEach(function(modal) {
       modal.addEventListener('click', function(e) {
         if (e.target === modal) closeModal(modal);
       });
     });
 
-    // ESC closes any open modal
+    // ESC closes any open modal ---------------------------------------------
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         qsa('.modal[aria-hidden="false"]').forEach(closeModal);
       }
     });
+
+    // Restore scroll position and optionally re-open time block modal after full page reload
+    try {
+      const saved = sessionStorage.getItem('admin:scrollY');
+      if (saved !== null) {
+        window.scrollTo(0, Number(saved) || 0);
+        sessionStorage.removeItem('admin:scrollY');
+      }
+      const openStation = sessionStorage.getItem('admin:openAddTimeBlock');
+      if (openStation) {
+        // Find the add time block button for this station and click it to re-open modal
+        const btn = qs('.open-time-block-btn[data-station-id="' + openStation + '"]');
+        if (btn) { btn.click(); }
+        sessionStorage.removeItem('admin:openAddTimeBlock');
+      }
+    } catch (err) { /* ignore */ }
+
+    // Station collapse/expand with localStorage persistence ------------------
+    (function() {
+      const STORAGE_KEY = 'admin:collapsedStations';
+      function readSet() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return new Set();
+          return new Set(JSON.parse(raw));
+        } catch (e) { return new Set(); }
+      }
+      function saveSet(set) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set))); } catch (e) {}
+      }
+
+      const collapsed = readSet();
+      // apply persisted state
+      collapsed.forEach(sid => {
+        const card = qs('article.station-card[data-station-id="' + sid + '"]');
+        const btn = qs('.station-toggle[data-station-id="' + sid + '"]');
+        if (card) card.classList.add('is-collapsed');
+        if (btn) {
+          btn.setAttribute('aria-pressed', 'true');
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      qsa('.station-toggle').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const sid = btn.getAttribute('data-station-id');
+          const card = qs('article.station-card[data-station-id="' + sid + '"]');
+          if (!card) return;
+          const collapsedNow = card.classList.toggle('is-collapsed');
+          // aria-pressed indicates visual pressed state; aria-expanded should reflect content visibility
+          btn.setAttribute('aria-pressed', collapsedNow ? 'true' : 'false');
+          btn.setAttribute('aria-expanded', collapsedNow ? 'false' : 'true');
+          if (collapsedNow) collapsed.add(sid); else collapsed.delete(sid);
+          saveSet(collapsed);
+        });
+      });
+    })();
+
+    // Inline capacity editing ------------------------------------------------
+    function handleCapacityFormSubmit(form, cb) {
+      // Serialize to x-www-form-urlencoded so express.urlencoded() will parse req.body
+      const data = new URLSearchParams();
+      Array.from(form.elements).forEach(el => {
+        if (!el.name) return;
+        if (el.type === 'checkbox') {
+          if (el.checked) data.append(el.name, el.value);
+        } else if (!el.disabled) {
+          data.append(el.name, el.value);
+        }
+      });
+      fetch(form.action, {
+        method: form.method || 'POST',
+        credentials: 'same-origin',
+        body: data.toString(),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      }).then(async res => {
+        if (res.ok) {
+          // Try to parse JSON response if controller implements it
+          try {
+            const j = await res.json();
+            if (j && j.updated && typeof j.capacity !== 'undefined') {
+              cb(null, j.capacity);
+              return;
+            }
+          } catch (e) { /* not JSON */ }
+          // fallback to value from form
+          const cap = data.get('capacity_needed');
+          cb(null, cap);
+        } else {
+          cb(new Error('Server error ' + res.status));
+        }
+      }).catch(err => cb(err));
+    }
+
+    qsa('.edit-capacity-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const bid = btn.getAttribute('data-block-id');
+        const form = qs('.capacity-edit-form[data-block-id="' + bid + '"]');
+        const metric = btn.closest('.admin-block__metric');
+        const display = metric ? metric.querySelector('.capacity-display') : null;
+        if (form) {
+          form.style.display = '';
+          if (display) display.style.display = 'none';
+          // Focus input
+          const input = form.querySelector('input[name="capacity_needed"]');
+          if (input) input.focus();
+        }
+      });
+    });
+
+    qsa('.cancel-capacity-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const form = btn.closest('.capacity-edit-form');
+        if (!form) return;
+        const metric = form.closest('.admin-block__metric');
+        const display = metric ? metric.querySelector('.capacity-display') : null;
+        form.style.display = 'none';
+        if (display) display.style.display = '';
+      });
+    });
+
+    qsa('.capacity-edit-form').forEach(form => {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const metric = form.closest('.admin-block__metric');
+        const display = metric ? metric.querySelector('.capacity-display') : null;
+        handleCapacityFormSubmit(form, function(err, newCap) {
+          if (err) {
+            alert('Failed to update capacity: ' + (err && err.message ? err.message : 'unknown'));
+            return;
+          }
+          // Update UI
+          if (display) {
+            display.innerHTML = '<strong>' + String(newCap) + '</strong>';
+            display.style.display = '';
+          }
+          form.style.display = 'none';
+        });
+      });
+    });
+
+    // Drag & drop ordering for stations --------------------------------------
+    (function initStationDnD() {
+      const list = qs('.js-station-list');
+      if (!list) return;
+      let dragSrcEl = null;
+
+      function evtTargetStation(el) {
+        return el.closest && el.closest('article.station-card');
+      }
+
+      function handleDragStart(e) {
+        const el = evtTargetStation(e.target);
+        if (!el) return;
+        dragSrcEl = el;
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', el.getAttribute('data-station-id')); } catch (err) {}
+        el.classList.add('dragging');
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const over = evtTargetStation(e.target);
+        if (!over || over === dragSrcEl) return;
+        const rect = over.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < (rect.height / 2);
+        if (before) {
+          over.parentNode.insertBefore(dragSrcEl, over);
+        } else {
+          over.parentNode.insertBefore(dragSrcEl, over.nextSibling);
+        }
+      }
+
+      function handleDragEnd(e) {
+        if (dragSrcEl) dragSrcEl.classList.remove('dragging');
+        dragSrcEl = null;
+        persistStationOrder();
+      }
+
+      function persistStationOrder() {
+        const eventId = list.getAttribute('data-event-id');
+        if (!eventId) return;
+        const items = Array.from(list.querySelectorAll('article.station-card'));
+        const payload = items.map((it, idx) => ({ station_id: Number(it.getAttribute('data-station-id')), station_order: idx }));
+        // send POST JSON to server
+        fetch(`/admin/event/${encodeURIComponent(eventId)}/stations/reorder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: payload }),
+          credentials: 'same-origin'
+        }).then(res => {
+          if (!res.ok) console.warn('Failed to persist station order', res.status);
+        }).catch(err => console.error('Error persisting station order', err));
+      }
+
+      // wire events
+      qsa('article.station-card', list).forEach(item => {
+        item.addEventListener('dragstart', handleDragStart, false);
+        item.addEventListener('dragover', handleDragOver, false);
+        item.addEventListener('dragend', handleDragEnd, false);
+      });
+
+      // also support drag by handle (pointerdown -> set draggable)
+      qsa('.drag-handle', list).forEach(h => {
+        h.addEventListener('pointerdown', function() {
+          const card = evtTargetStation(h);
+          if (!card) return;
+          card.setAttribute('draggable', 'true');
+        });
+      });
+    })();
   });
 })();

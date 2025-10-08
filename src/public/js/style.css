@@ -1156,71 +1156,6 @@ body.app-shell {
   margin-bottom: 1.5rem;
 }
 
-.slot-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: flex-start;
-  margin-bottom: 1.5rem;
-}
-
-.slot-toolbar__group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.slot-toolbar__label {
-  font-weight: 600;
-  color: var(--text-strong);
-}
-
-.slot-toolbar__select {
-  min-width: 11rem;
-  padding: 0.45rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(15, 23, 42, 0.18);
-  background: #fff;
-  font-size: 0.95rem;
-}
-
-.slot-view {
-  display: block;
-}
-
-.slot-view[hidden] {
-  display: none !important;
-}
-
-.slot-view--station {
-  margin-top: 1rem;
-}
-
-.slot-view--time {
-  margin-top: 1rem;
-}
-
-.slot-view--station [data-role="station-chip"] {
-  display: none;
-}
-
-.slot-view--time [data-role="station-chip"] {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-right: 0.65rem;
-  padding: 0.15rem 0.5rem;
-  background: rgba(59, 130, 246, 0.12);
-  border-radius: 999px;
-  font-weight: 600;
-  text-transform: none;
-}
-
-.slot-view--time .time-block-item {
-  cursor: pointer;
-}
-
 .time-block-list {
   list-style: none;
   margin: 0;
@@ -1294,17 +1229,7 @@ body.app-shell {
 }
 
 .time-block-item.disabled-overlap {
-  opacity: 0.55;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.slot-conflict-note {
-  display: block;
-  margin-top: 0.45rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #b91c1c;
+  opacity: 0.45;
 }
 
 #selected-slots-container {
@@ -1318,65 +1243,6 @@ body.app-shell {
 #selected-slots-container h4 {
   margin: 0 0 0.6rem;
   font-size: 1rem;
-}
-
-.selection-fab {
-  position: fixed;
-  right: clamp(1rem, 4vw, 2rem);
-  bottom: clamp(1rem, 4vw, 2rem);
-  z-index: 1100;
-  display: none;
-}
-
-.selection-fab.is-visible {
-  display: block;
-  animation: selectionFabFade 160ms ease-in;
-}
-
-.selection-fab__button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.75rem 1.1rem;
-  border-radius: 999px;
-  border: none;
-  font-weight: 600;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.95), rgba(59, 130, 246, 0.9));
-  color: #fff;
-  cursor: pointer;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.25);
-}
-
-.selection-fab__button:focus-visible {
-  outline: 3px solid rgba(59, 130, 246, 0.45);
-  outline-offset: 2px;
-}
-
-.selection-fab__button:hover {
-  box-shadow: 0 18px 32px rgba(37, 99, 235, 0.32);
-}
-
-@keyframes selectionFabFade {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (max-width: 640px) {
-  .selection-fab {
-    left: clamp(1rem, 4vw, 2rem);
-    right: clamp(1rem, 4vw, 2rem);
-  }
-
-  .selection-fab__button {
-    justify-content: center;
-    width: 100%;
-  }
 }
 
 #selected-slots-container ul {

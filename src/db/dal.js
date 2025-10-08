@@ -1,12 +1,27 @@
 // src/db/dal.js
+// Centralised wrapper around the SQLite layer. Grouped into `admin` and
+// `public` namespaces so higher tiers never have to write SQL directly.
 const { db } = require('../config/database');
 const createError = require('http-errors');
 
+// Enforce referential integrity at the SQLite level.
 try { db.exec('PRAGMA foreign_keys = ON;'); } catch (_) {}
 
+// Lightweight, idempotent schema migrations to keep SQLite aligned.
 // Ensure publish column exists (idempotent)
 try {
   db.prepare(`ALTER TABLE events ADD COLUMN is_published INTEGER NOT NULL DEFAULT 0`).run();
+} catch (_) { /* already exists */ }
+// Ensure station order column exists so admins can persist manual ordering
+try {
+  db.prepare(`ALTER TABLE stations ADD COLUMN station_order INTEGER NOT NULL DEFAULT 0`).run();
+} catch (_) { /* already exists */ }
+// Ensure new station description fields exist
+try {
+  db.prepare(`ALTER TABLE stations ADD COLUMN description_overview TEXT`).run();
+} catch (_) { /* already exists */ }
+try {
+  db.prepare(`ALTER TABLE stations ADD COLUMN description_tasks TEXT`).run();
 } catch (_) { /* already exists */ }
 
 try {
@@ -25,13 +40,17 @@ try {
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_volunteer_tokens_event ON volunteer_tokens(event_id)`).run();
 } catch (_) { /* already exists */ }
 
+/**
+ * Convert the better-sqlite3 metadata into a simpler object that callers can
+ * rely on. This keeps service code tidy and testable.
+ */
 function mapRun(res) {
   return { changes: res.changes, lastInsertRowid: res.lastInsertRowid };
 }
 
 // ---------- Admin DAL ----------
 const admin = {
-  // events list includes publish flag
+  // List every event for the admin dashboard, including publish state.
   getAllEvents: () => {
     return db.prepare(`
       SELECT event_id, name, description, date_start, date_end, 
@@ -41,12 +60,17 @@ const admin = {
     `).all();
   },
 
+  // Expand a single event record with any stations/time blocks that belong to it.
   getEventById: (id) => {
     return db.prepare(`
       SELECT
         e.event_id, e.name, e.description, e.date_start, e.date_end,
         COALESCE(e.is_published, 0) AS is_published,
-        s.station_id, s.name AS station_name, s.description AS station_description,
+        s.station_id,
+        s.name AS station_name,
+        s.description AS station_description,
+        s.description_overview AS station_description_overview,
+        s.description_tasks AS station_description_tasks,
         tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
@@ -59,14 +83,21 @@ const admin = {
         GROUP BY block_id
       ) r ON r.block_id = tb.block_id
       WHERE e.event_id = ?
-      ORDER BY s.station_id, datetime(tb.start_time) ASC
+      -- Prefer explicit station_order when present, fall back to station_id for deterministic ordering
+      ORDER BY COALESCE(s.station_order, 0), datetime(tb.start_time) ASC
     `).all(id);
   },
 
+  // Fetch one station alongside its blocks for edit forms and API responses.
   getStationWithBlocks: (id) => {
     return db.prepare(`
       SELECT
-        s.station_id, s.event_id, s.name AS station_name, s.description AS station_description,
+        s.station_id,
+        s.event_id,
+        s.name AS station_name,
+        s.description AS station_description,
+        s.description_overview AS station_description_overview,
+        s.description_tasks AS station_description_tasks,
         tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
@@ -82,6 +113,7 @@ const admin = {
     `).all(id);
   },
 
+  // Pull back every reservation for an event so the admin UI can display rosters.
   getEventReservations: (eventId) => {
     return db.prepare(`
       SELECT
@@ -102,6 +134,7 @@ const admin = {
     `).all(eventId);
   },
 
+  // Read a reservation plus volunteer record for edit/move flows.
   getReservationById: (reservationId) => {
     return db.prepare(`
       SELECT
@@ -122,6 +155,7 @@ const admin = {
     `).get(reservationId);
   },
 
+  // Update the volunteer table when admins change contact details.
   updateVolunteer: (volunteerId, name, email, phone) => {
     try {
       const res = db.prepare(`
@@ -135,6 +169,7 @@ const admin = {
     }
   },
 
+  // Remove a volunteer reservation from a time block.
   deleteReservation: (reservationId) => {
     try {
       const res = db.prepare(`DELETE FROM reservations WHERE reservation_id = ?`).run(reservationId);
@@ -144,6 +179,7 @@ const admin = {
     }
   },
 
+  // Atomically move a reservation to a new block while enforcing capacity & duplicate rules.
   moveReservation: (reservationId, newBlockId) => {
     const tx = db.transaction((rid, blockId) => {
       const reservation = db.prepare(`
@@ -189,18 +225,24 @@ const admin = {
     }
   },
 
-  createStation: (eventId, name, description) => {
+  // Insert a station and auto-increment the display order for the parent event.
+  createStation: (eventId, name, overview, tasks) => {
     try {
+      const combinedDescription = [overview, tasks].filter(Boolean).join('\n\n');
       const res = db.prepare(`
-        INSERT INTO stations (event_id, name, description)
-        VALUES (?, ?, ?)
-      `).run(eventId, name, description);
+        INSERT INTO stations (event_id, name, description, description_overview, description_tasks, station_order)
+        VALUES (
+          ?, ?, ?, ?, ?,
+          COALESCE((SELECT MAX(station_order) FROM stations WHERE event_id = ?), -1) + 1
+        )
+      `).run(eventId, name, combinedDescription, overview || null, tasks || null, eventId);
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error creating station: ' + e.message);
     }
   },
 
+  // Add a time block with the requested capacity under a station.
   createTimeBlock: (stationId, startTxt, endTxt, capacity) => {
     try {
       const res = db.prepare(`
@@ -214,6 +256,7 @@ const admin = {
   },
 
   // Update
+  // Apply a partial update to an event record.
   updateEvent: (eventId, patch) => {
     const fields = [];
     const values = [];
@@ -231,6 +274,7 @@ const admin = {
     }
   },
 
+  // Toggle whether an event is visible to the public sign-up page.
   setEventPublish: (eventId, isPublished) => {
     try {
       const res = db.prepare(`UPDATE events SET is_published = ? WHERE event_id = ?`).run(isPublished ? 1 : 0, eventId);
@@ -240,15 +284,22 @@ const admin = {
     }
   },
 
-  updateStation: (stationId, name, description) => {
+  // Persist edits to a station's descriptive fields.
+  updateStation: (stationId, name, overview, tasks) => {
     try {
-      const res = db.prepare(`UPDATE stations SET name = ?, description = ? WHERE station_id = ?`).run(name, description, stationId);
+      const combinedDescription = [overview, tasks].filter(Boolean).join('\n\n');
+      const res = db.prepare(`
+        UPDATE stations
+        SET name = ?, description = ?, description_overview = ?, description_tasks = ?
+        WHERE station_id = ?
+      `).run(name, combinedDescription, overview || null, tasks || null, stationId);
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error updating station: ' + e.message);
     }
   },
 
+  // Apply a partial update to a time block entry.
   updateTimeBlock: (blockId, patch) => {
     const fields = [];
     const values = [];
@@ -266,6 +317,7 @@ const admin = {
   },
 
   // Delete
+  // Cascade-delete an event, removing dependent stations, blocks, and reservations.
   deleteEvent: (id) => {
     try {
       const txn = db.transaction((eventId) => {
@@ -291,6 +343,7 @@ const admin = {
     }
   },
 
+  // Delete a station and its blocks/reservations via a transaction.
   deleteStation: (id) => {
     try {
       const txn = db.transaction((stationId) => {
@@ -306,6 +359,7 @@ const admin = {
     }
   },
 
+  // Delete a single time block and any attached reservations.
   deleteTimeBlock: (blockId) => {
     try {
       const txn = db.transaction((bid) => {
@@ -317,6 +371,21 @@ const admin = {
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error deleting time block: ' + e.message);
+    }
+  },
+  // Update station ordering for an event. Accepts array of { station_id, station_order }
+  updateStationsOrder: (pairs) => {
+    try {
+      const tx = db.transaction((list) => {
+        const stmt = db.prepare(`UPDATE stations SET station_order = ? WHERE station_id = ?`);
+        for (const p of list) {
+          stmt.run(p.station_order, p.station_id);
+        }
+        return { changes: list.length };
+      });
+      return tx(pairs);
+    } catch (e) {
+      throw createError(500, 'DB error updating station order: ' + e.message);
     }
   },
 };
@@ -334,6 +403,7 @@ const publicDal = {
     `).all();
   },
 
+  // Minimal event lookup used when building volunteer dashboards.
   getEventBasic: (eventId) => {
     return db.prepare(`
       SELECT event_id, name, description, date_start, date_end,
@@ -343,11 +413,16 @@ const publicDal = {
     `).get(eventId);
   },
 
+  // Full event detail (stations + blocks) for the public signup page.
   getEventForPublic: (eventId) => {
     return db.prepare(`
       SELECT
         e.event_id, e.name, e.description, e.date_start, e.date_end,
-        s.station_id, s.name AS station_name, s.description AS station_description,
+        s.station_id,
+        s.name AS station_name,
+        s.description AS station_description,
+        s.description_overview AS station_description_overview,
+        s.description_tasks AS station_description_tasks,
         tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
@@ -361,10 +436,11 @@ const publicDal = {
       ) r ON r.block_id = tb.block_id
       WHERE e.event_id = ?
         AND COALESCE(e.is_published, 0) = 1
-      ORDER BY s.station_id, datetime(tb.start_time) ASC
+      ORDER BY COALESCE(s.station_order, 0), datetime(tb.start_time) ASC
     `).all(eventId);
   },
 
+  // Convenience helpers around volunteers and reservations -------------------
   getVolunteerByEmail: (email) => {
     return db.prepare(`SELECT * FROM volunteers WHERE email = ?`).get(email);
   },
@@ -400,6 +476,7 @@ const publicDal = {
     }
   },
 
+  // Reserve one or more slots, reusing the volunteer record if the email exists.
   reserveVolunteerSlots: (volunteer, blockIds) => {
     const tx = db.transaction((v, ids) => {
       let volunteerId;
@@ -458,6 +535,7 @@ const publicDal = {
     };
   },
 
+  // Tokens power "manage my reservation" links. We keep one per volunteer/event.
   storeVolunteerToken: (token, volunteerId, eventId, expiresAt) => {
     const txn = db.transaction(() => {
       db.prepare(`DELETE FROM volunteer_tokens WHERE volunteer_id = ? AND event_id = ?`).run(volunteerId, eventId);
@@ -520,6 +598,7 @@ const publicDal = {
     `).all(volunteerId, eventId);
   },
 
+  // Replace an existing reservation set with a new collection of time blocks.
   replaceVolunteerReservations: (volunteerId, eventId, nextBlockIds) => {
     const tx = db.transaction((vid, eid, ids) => {
       const distinctIds = Array.from(new Set(ids.map(Number).filter(Number.isFinite)));

@@ -1,8 +1,19 @@
 // src/services/adminService.js
+// -----------------------------------------------------------------------------
+// Centralised business logic that powers the admin dashboard. Controllers call
+// into this module to manipulate events, stations, time blocks, and volunteer
+// reservations. The functions below provide validation, input normalization,
+// and richer data shaping on top of the raw DAL helpers.
+// -----------------------------------------------------------------------------
 const dal = require('../db/dal');
 const createError = require('http-errors');
 
-// --- helpers: parse & canonicalize "local" datetime strings (no TZ math) ---
+/**
+ * Normalise a datetime-local string (e.g. `YYYY-MM-DDTHH:mm`) into a canonical
+ * `YYYY-MM-DD HH:mm` format so the database always receives consistent values.
+ * The helper intentionally avoids timezone conversion because the UI supplies
+ * pre-localised values and the schema stores them verbatim.
+ */
 function toCanonicalLocalString(s) {
   if (!s || typeof s !== 'string') throw createError(400, 'Datetime is required.');
   // Accept "YYYY-MM-DDTHH:mm" (from <input type="datetime-local">) or "YYYY-MM-DD HH:mm"
@@ -14,6 +25,11 @@ function toCanonicalLocalString(s) {
   return `${Y}-${M}-${D} ${h}:${m2}`;
 }
 
+/**
+ * Compare two canonical local datetime strings without performing timezone
+ * calculations. We convert the plain text into UTC timestamps using the same
+ * components which keeps chronological ordering intact for comparison logic.
+ */
 function cmpLocal(a, b) {
   // Compare two "YYYY-MM-DD HH:mm" strings without timezone by mapping to UTC with the same components
   const A = a.match(/^(\d{4})-(\d{2})-(\d{2})[ ](\d{2}):(\d{2})$/);
@@ -24,8 +40,8 @@ function cmpLocal(a, b) {
 }
 
 /**
- * Retrieves events for the admin dashboard, sorted with the soonest event first
- * so coordinators see the most urgent items at the top of the list.
+ * Retrieve all events for the admin dashboard sorted chronologically so that
+ * coordinators always see the next event first.
  */
 function getDashboardData() {
   return dal.admin.getAllEvents().sort((a, b) => {
@@ -36,9 +52,9 @@ function getDashboardData() {
 }
 
 /**
- * Resolves full event details for admin consumption, including stations,
- * time blocks, and any volunteer reservations so everything can be managed in
- * a single view.
+ * Resolve full event details for admins including stations, time blocks, and
+ * volunteer reservations. The DAL returns a flattened join; this function
+ * reshapes the data into a nested structure that the views expect.
  */
 function getEventDetailsForAdmin(eventId) {
   const rows = dal.admin.getEventById(eventId);
@@ -72,10 +88,14 @@ function getEventDetailsForAdmin(eventId) {
   rows.forEach(row => {
     if (!row.station_id) return;
     if (!stationMap.has(row.station_id)) {
+      const about = row.station_description_overview || row.station_description || '';
+      const duties = row.station_description_tasks || '';
       stationMap.set(row.station_id, {
         station_id: row.station_id,
         name: row.station_name || row.s_name || row.name,
-        description: row.station_description || row.s_description || '',
+        about,
+        duties,
+        description: about,
         time_blocks: []
       });
     }
@@ -99,7 +119,10 @@ function getEventDetailsForAdmin(eventId) {
   return event;
 }
 
-/** Station detail (admin view) */
+/**
+ * Load a single station and its time blocks for the admin detail view. Similar
+ * to `getEventDetailsForAdmin` but scoped to one station.
+ */
 function getStationDetailsForAdmin(stationId) {
   const rows = dal.admin.getStationWithBlocks(stationId);
   if (!rows || rows.length === 0) return null;
@@ -107,7 +130,9 @@ function getStationDetailsForAdmin(stationId) {
   const station = {
     station_id: rows[0].station_id,
     name: rows[0].station_name || rows[0].name,
-    description: rows[0].station_description || '',
+    about: rows[0].station_description_overview || rows[0].station_description || '',
+    duties: rows[0].station_description_tasks || '',
+    description: rows[0].station_description_overview || rows[0].station_description || '',
     time_blocks: []
   };
 
@@ -130,7 +155,10 @@ function getStationDetailsForAdmin(stationId) {
   return station;
 }
 
-/** Create Event */
+/**
+ * Create a new event after validating the payload. Dates must be provided and
+ * the end needs to be chronologically after the start.
+ */
 function createEvent(arg) {
   const data = typeof arg === 'object' && arg !== null ? arg : {};
   const { name, description, date_start, date_end } = data;
@@ -145,7 +173,10 @@ function createEvent(arg) {
   return dal.admin.createEvent(name, description || '', startTxt, endTxt);
 }
 
-/** Update Event (name/description/dates) */
+/**
+ * Update an existing event with optional name/description/datetime changes.
+ * Only fields present in the payload are persisted.
+ */
 function updateEvent(eventId, data) {
   if (!eventId) throw createError(400, 'Event ID required.');
   const patch = {};
@@ -159,29 +190,33 @@ function updateEvent(eventId, data) {
   return dal.admin.updateEvent(eventId, patch);
 }
 
-/** Publish/Unpublish */
+/**
+ * Toggle the publish state of an event so it shows up (or disappears) from the
+ * public signup experience.
+ */
 function setEventPublish(eventId, isPublished) {
   if (!eventId) throw createError(400, 'Event ID required.');
   return dal.admin.setEventPublish(eventId, !!isPublished);
 }
 
-/** Create Station */
 /**
- * Creates a station for an event. When copyStationId is provided we mirror the
- * source station's description and time blocks so coordinators can quickly set
- * up similar stations (e.g. multiple check-in desks).
+ * Create a station for a given event. When a `copyStationId` is provided we
+ * mirror the source station's descriptive text and time blocks so coordinators
+ * can quickly spin up similar stations (e.g. multiple check-in desks).
  */
 function createStation(arg1, name, description, copyStationId) {
-  let eventId, nm, desc, copyFrom;
+  let eventId, nm, about, duties, copyFrom;
   if (typeof arg1 === 'object' && arg1 !== null) {
     eventId = arg1.event_id || arg1.eventId;
     nm = arg1.name;
-    desc = arg1.description;
+    about = arg1.about ?? arg1.description_overview ?? arg1.summary ?? arg1.description;
+    duties = arg1.duties ?? arg1.description_tasks ?? arg1.expectations ?? '';
     copyFrom = arg1.copyStationId || arg1.copy_from_station_id;
   } else {
     eventId = arg1;
     nm = name;
-    desc = description;
+    about = description;
+    duties = '';
     copyFrom = copyStationId;
   }
   if (!eventId || !nm) {
@@ -200,7 +235,8 @@ function createStation(arg1, name, description, copyStationId) {
       throw createError(400, 'You can only copy stations within the same event.');
     }
     sourceStation = {
-      description: rows[0].station_description || rows[0].description || '',
+      about: rows[0].station_description_overview || rows[0].station_description || rows[0].description || '',
+      duties: rows[0].station_description_tasks || '',
       blocks: rows
         .filter(row => row.block_id)
         .map(row => ({
@@ -211,9 +247,14 @@ function createStation(arg1, name, description, copyStationId) {
     };
   }
 
-  const finalDescription = (desc && desc.trim().length) ? desc : (sourceStation && sourceStation.description) || '';
+  const finalAbout = (about && about.toString().trim().length)
+    ? about.toString().trim()
+    : (sourceStation && sourceStation.about) || '';
+  const finalDuties = (duties && duties.toString().trim().length)
+    ? duties.toString().trim()
+    : (sourceStation && sourceStation.duties) || '';
 
-  const result = dal.admin.createStation(eventId, nm.trim(), finalDescription);
+  const result = dal.admin.createStation(eventId, nm.trim(), finalAbout, finalDuties);
   const newStationId = result.lastInsertRowid;
 
   if (sourceStation && sourceStation.blocks.length) {
@@ -234,16 +275,27 @@ function createStation(arg1, name, description, copyStationId) {
   return { station_id: newStationId };
 }
 
-/** Update Station */
+/**
+ * Update an existing station's name and descriptive fields.
+ */
 function updateStation(stationId, data) {
   if (!stationId) throw createError(400, 'Station ID required.');
-  const nm = data.name;
-  const desc = data.description;
+  const nm = data.name ? String(data.name).trim() : '';
+  const about = data.about ?? data.description_overview ?? data.summary ?? data.description ?? '';
+  const duties = data.duties ?? data.description_tasks ?? data.expectations ?? '';
   if (!nm) throw createError(400, 'Station name is required.');
-  return dal.admin.updateStation(stationId, nm, desc || '');
+  return dal.admin.updateStation(
+    stationId,
+    nm,
+    String(about ?? '').trim(),
+    String(duties ?? '').trim()
+  );
 }
 
-/** Create Time Block */
+/**
+ * Create a time block under a station ensuring the times are valid and the
+ * capacity is a positive integer.
+ */
 function createTimeBlock(data) {
   const { station_id, start_time, end_time, capacity_needed } = data || {};
   if (!station_id || !start_time || !end_time || typeof capacity_needed === 'undefined') {
@@ -258,7 +310,10 @@ function createTimeBlock(data) {
   return dal.admin.createTimeBlock(station_id, startTxt, endTxt, cap);
 }
 
-/** Update Time Block */
+/**
+ * Update a time block with any subset of start/end/capacity while reusing the
+ * same validation routine as creation.
+ */
 function updateTimeBlock(blockId, data) {
   if (!blockId) throw createError(400, 'Time block ID required.');
   const patch = {};
@@ -275,6 +330,10 @@ function updateTimeBlock(blockId, data) {
   return dal.admin.updateTimeBlock(blockId, patch);
 }
 
+/**
+ * Add a reservation directly to a time block on behalf of a volunteer. The DAL
+ * handles duplicate detection so we simply forward the normalized payload.
+ */
 function addReservationToBlock(blockId, volunteer) {
   if (!blockId) throw createError(400, 'Time block ID required.');
   if (!volunteer || !volunteer.name || !volunteer.email) {
@@ -291,6 +350,10 @@ function addReservationToBlock(blockId, volunteer) {
   return result;
 }
 
+/**
+ * Update volunteer contact details and optionally move the reservation to a
+ * different time block (while respecting capacity limits).
+ */
 function updateReservation(reservationId, payload) {
   if (!reservationId) throw createError(400, 'Reservation ID required.');
   const reservation = dal.admin.getReservationById(reservationId);
@@ -318,12 +381,15 @@ function updateReservation(reservationId, payload) {
   return true;
 }
 
+/**
+ * Remove a reservation entirely from a time block.
+ */
 function deleteReservation(reservationId) {
   if (!reservationId) throw createError(400, 'Reservation ID required.');
   return dal.admin.deleteReservation(reservationId);
 }
 
-/** Deletes */
+/** Convenience wrappers for deletes – DAL already validates referential cleanup. */
 const deleteEvent = (id) => dal.admin.deleteEvent(id);
 const deleteStation = (id) => dal.admin.deleteStation(id);
 const deleteTimeBlock = (id) => dal.admin.deleteTimeBlock(id);
@@ -332,6 +398,22 @@ module.exports = {
   getDashboardData,
   getEventDetailsForAdmin,
   getStationDetailsForAdmin,
+  /**
+   * Reorder stations for an event. Expects an array of { station_id, station_order }.
+   */
+  reorderStations: (eventId, orderArray) => {
+    if (!eventId) throw createError(400, 'Event ID required.');
+    if (!Array.isArray(orderArray)) throw createError(400, 'Order payload must be an array.');
+    const pairs = orderArray.map(item => {
+      const station_id = Number(item.station_id);
+      const station_order = Number(item.station_order);
+      if (!Number.isFinite(station_id) || !Number.isFinite(station_order)) {
+        throw createError(400, 'Invalid station payload.');
+      }
+      return { station_id, station_order };
+    });
+    return dal.admin.updateStationsOrder(pairs);
+  },
   createEvent,
   updateEvent,
   setEventPublish,

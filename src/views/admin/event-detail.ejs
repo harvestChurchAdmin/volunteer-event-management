@@ -54,6 +54,23 @@ function toTimestamp(txt) {
   const dt = parseLocalDate(txt);
   return dt ? dt.getTime() : Number.NEGATIVE_INFINITY;
 }
+
+const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
+const slotTotals = stations.reduce((acc, station) => {
+  const blocks = Array.isArray(station.time_blocks)
+    ? station.time_blocks
+    : (station.time_blocks ? Object.values(station.time_blocks) : []);
+  blocks.forEach((block) => {
+    const capacity = Number(block && block.capacity_needed) || 0;
+    const filled = Array.isArray(block && block.reservations) ? block.reservations.length : 0;
+    acc.capacity += capacity;
+    acc.filled += filled;
+  });
+  return acc;
+}, { capacity: 0, filled: 0 });
+const slotPercent = slotTotals.capacity > 0
+  ? Math.round((slotTotals.filled / slotTotals.capacity) * 100)
+  : 0;
 %>
 
 <!-- Page header: core event metadata + publish/delete actions -->
@@ -65,6 +82,16 @@ function toTimestamp(txt) {
       <p class="muted"><%= event.description %></p>
     <% } %>
     <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
+    <% if (slotTotals.capacity > 0) { %>
+      <div class="event-slot-summary" role="status" aria-live="polite">
+        <span class="event-slot-summary__metric">
+          <strong><%= slotTotals.filled %></strong> filled
+        </span>
+        <span class="event-slot-summary__slash">/</span>
+        <span class="event-slot-summary__metric"><%= slotTotals.capacity %> total slots</span>
+        <span class="event-slot-summary__pct">(<%= slotPercent %>% full)</span>
+      </div>
+    <% } %>
   </div>
   <div class="page-header__actions">
     <form action="/admin/event/<%= event.event_id %>/publish" method="POST">
@@ -83,10 +110,6 @@ function toTimestamp(txt) {
 
 <%- include('../partials/messages', { messages }) %>
 
-<%
-  const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
-%>
-
 <!-- Stations: listing + management modals -->
 <section class="page-section page-shell">
   <div class="section-header">
@@ -101,6 +124,13 @@ function toTimestamp(txt) {
             ? station.time_blocks
             : (station.time_blocks ? Object.values(station.time_blocks) : []);
           const sortedBlocks = rawBlocks.slice().sort((a, b) => toTimestamp(a.start_time) - toTimestamp(b.start_time));
+          const stationTotals = sortedBlocks.reduce((acc, block) => {
+            const capacity = Number(block && block.capacity_needed) || 0;
+            const filled = Array.isArray(block && block.reservations) ? block.reservations.length : 0;
+            acc.capacity += capacity;
+            acc.filled += filled;
+            return acc;
+          }, { capacity: 0, filled: 0 });
         %>
         <article class="card station-card" data-station-id="<%= station.station_id %>" draggable="true">
           <header class="station-card__header">
@@ -116,7 +146,13 @@ function toTimestamp(txt) {
                 <div class="station-card__heading-top">
                   <span class="drag-handle" aria-hidden="true" title="Drag to reorder station">☰</span>
                   <h2><%= station.name %></h2>
+                  <span class="station-card__heading-meta" aria-hidden="true">
+                    <span class="station-card__badge">
+                      <strong><%= stationTotals.filled %></strong>/<%= stationTotals.capacity %> filled
+                    </span>
+                  </span>
                 </div>
+                <span class="sr-only station-card__sr-metrics">Filled <%= stationTotals.filled %> of <%= stationTotals.capacity %> slots</span>
               </div>
             </div>
             <div class="station-card__header-actions">

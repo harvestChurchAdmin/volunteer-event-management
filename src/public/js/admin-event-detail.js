@@ -7,6 +7,9 @@
   function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
 
   const modalOpener = new WeakMap();
+  const SCROLL_KEY = 'admin:scrollY';
+  const FOCUS_STATION_KEY = 'admin:focusStation';
+  const COLLAPSED_STORAGE_KEY = 'admin:collapsedStations';
 
   // Helpers ------------------------------------------------------------------
   /**
@@ -63,6 +66,40 @@
     if (!match) return NaN;
     const [, y, mo, d, h, mi] = match;
     return new Date(+y, +mo - 1, +d, +h, +mi).getTime();
+  }
+
+  /**
+   * Ensure the requested station card is in view and briefly highlighted without
+   * mutating its collapsed/expanded state.
+   */
+  function focusStationCard(stationState) {
+    if (!stationState) return;
+
+    let payload = stationState;
+    if (typeof stationState === 'string') {
+      try {
+        payload = JSON.parse(stationState);
+      } catch (err) {
+        payload = { id: stationState };
+      }
+    } else if (typeof stationState !== 'object') {
+      payload = { id: stationState };
+    }
+
+    if (!payload || !payload.id) return;
+    const id = String(payload.id);
+    const card = qs('article.station-card[data-station-id="' + id + '"]');
+    if (!card) return;
+
+    // Bring the card into view without smooth scrolling to avoid heavy motion.
+    try { card.scrollIntoView({ behavior: 'auto', block: 'start' }); } catch (err) {
+      window.scrollTo(0, card.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0));
+    }
+
+    card.classList.add('station-card--flash');
+    setTimeout(function() {
+      card.classList.remove('station-card--flash');
+    }, 1600);
   }
 
   /**
@@ -311,7 +348,7 @@
         syncFormDatetimes(timeBlockForm);
         // Preserve scroll position across full page submit so user returns to same spot
         try {
-          sessionStorage.setItem('admin:scrollY', String(window.scrollY || window.pageYOffset || 0));
+          sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
           const addAnother = document.getElementById('timeblock-add-another');
           if (addAnother && addAnother.checked) {
             // record station-id so we can re-open after reload
@@ -352,6 +389,28 @@
         return true;
       });
     }
+
+    // Preserve scroll position + station focus when editing station details ---
+    qsa('form[id^="editStationForm-"]').forEach(function(form) {
+      if (form.dataset.scrollPersistInit === 'true') return;
+      form.addEventListener('submit', function() {
+        try {
+          sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+          const fromAttr = form.getAttribute('data-station-id');
+          const match = /^editStationForm-(.+)$/.exec(form.id || '');
+          const stationId = fromAttr || (match ? match[1] : null);
+          if (stationId) {
+            const card = qs('article.station-card[data-station-id="' + stationId + '"]');
+            const payload = {
+              id: stationId,
+              collapsed: card ? card.classList.contains('is-collapsed') : false
+            };
+            sessionStorage.setItem(FOCUS_STATION_KEY, JSON.stringify(payload));
+          }
+        } catch (err) { /* ignore sessionStorage errors */ }
+      });
+      form.dataset.scrollPersistInit = 'true';
+    });
 
     // Confirmation prompts ---------------------------------------------------
     const confirmState = {
@@ -451,10 +510,10 @@
 
     // Restore scroll position and optionally re-open time block modal after full page reload
     try {
-      const saved = sessionStorage.getItem('admin:scrollY');
+      const saved = sessionStorage.getItem(SCROLL_KEY);
       if (saved !== null) {
         window.scrollTo(0, Number(saved) || 0);
-        sessionStorage.removeItem('admin:scrollY');
+        sessionStorage.removeItem(SCROLL_KEY);
       }
       const openStation = sessionStorage.getItem('admin:openAddTimeBlock');
       if (openStation) {
@@ -463,11 +522,18 @@
         if (btn) { btn.click(); }
         sessionStorage.removeItem('admin:openAddTimeBlock');
       }
+      const focusStation = sessionStorage.getItem(FOCUS_STATION_KEY);
+      if (focusStation) {
+        setTimeout(function() {
+          focusStationCard(focusStation);
+        }, 0);
+        sessionStorage.removeItem(FOCUS_STATION_KEY);
+      }
     } catch (err) { /* ignore */ }
 
     // Station collapse/expand with localStorage persistence ------------------
     (function() {
-      const STORAGE_KEY = 'admin:collapsedStations';
+      const STORAGE_KEY = COLLAPSED_STORAGE_KEY;
       function readSet() {
         try {
           const raw = localStorage.getItem(STORAGE_KEY);

@@ -133,25 +133,147 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
     : `Your volunteer schedule for ${event.name}`;
 
   const listItems = reservations.length
-    ? reservations.map(slot => `- ${slot.station}: ${slot.start} – ${slot.end}`).join('\n')
+    ? reservations.map(slot => `• ${slot.station}: ${slot.start} – ${slot.end}`).join('\n')
     : 'You currently have no reserved opportunities.';
 
-  const text = `Hi ${volunteer.name || volunteer.email},\n\n` +
-    `Here is your schedule for "${event.name}":\n${listItems}\n\n` +
-    `Need to make a change? Manage your signup here: ${manageUrl}\n\n` +
-    `If you did not request this email you can ignore it.`;
+  const textLines = [
+    `Hi ${volunteer.name || volunteer.email},`,
+    '',
+    `Thank you so much for serving with us at ${event.name}! We are grateful for your time and heart to help our community.`,
+    '',
+    `Here is your schedule:`,
+    listItems,
+    '',
+    `Need to make a change? Manage your signup here: ${manageUrl}`,
+    '',
+    'If you have any questions or run into trouble, reach out to us:',
+    'Email: admin@harvestchurch.ca',
+    'Phone: 2503902152',
+    '',
+    'With gratitude,',
+    'Harvest Church Volunteer Team',
+    '',
+    'If you did not request this email you can ignore it.'
+  ];
+
+  const text = textLines.join('\n');
 
   const htmlList = reservations.length
-    ? `<ul>${reservations.map(slot => `<li><strong>${slot.station}</strong>: ${slot.start} – ${slot.end}</li>`).join('')}</ul>`
-    : '<p>You currently have no reserved opportunities.</p>';
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0 24px;">
+          ${reservations.map((slot, index) => `
+            <tr>
+              <td align="left" valign="top" style="padding:0 0 12px 0;">
+                <!--[if mso]>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td bgcolor="#f0f4ff" style="padding:12px 16px;">
+                <![endif]-->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
+                  <tr>
+                    <td bgcolor="#f0f4ff" style="background-color:#f0f4ff; border-radius:12px; padding:12px 16px; font-family:'Segoe UI', Arial, sans-serif;">
+                      <p style="margin:0 0 4px; font-weight:600; color:#1d4ed8; font-size:15px;">${slot.station}</p>
+                      <p style="margin:0; color:#475569; font-size:14px;">${slot.start} – ${slot.end}</p>
+                    </td>
+                  </tr>
+                </table>
+                <!--[if mso]>
+                      </td>
+                    </tr>
+                  </table>
+                <![endif]-->
+              </td>
+            </tr>
+            ${index < reservations.length - 1 ? '<tr><td height="4" style="font-size:0; line-height:0;">&nbsp;</td></tr>' : ''}
+          `).join('')}
+        </table>`
+    : '<p style="margin:16px 0 24px; color:#475569; font-family:\'Segoe UI\', Arial, sans-serif;">You currently have no reserved opportunities.</p>';
 
-  const html = `
-    <p>Hi ${volunteer.name || volunteer.email},</p>
-    <p>Here is your schedule for <strong>${event.name}</strong>:</p>
-    ${htmlList}
-    <p>Need to make a change? <a href="${manageUrl}">Manage your signup</a>.</p>
-    <p>If you did not request this email you can ignore it.</p>
-  `;
+  const html = `<!DOCTYPE html>
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <title>Volunteer Schedule</title>
+        <style>
+          table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+          a { text-decoration:none; }
+        </style>
+        <!--[if mso]>
+        <style type="text/css">
+          body, table, td { font-family: 'Segoe UI', Arial, sans-serif !important; }
+        </style>
+        <![endif]-->
+      </head>
+      <body style="margin:0; padding:0; background-color:#dfe4f3;">
+        <div role="article" aria-roledescription="email" lang="en" style="background-color:#dfe4f3;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#dfe4f3; margin:0;">
+            <tr>
+              <td align="center" style="padding:32px 16px;">
+                <!--[if mso]>
+                  <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td>
+                <![endif]-->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px; background-color:#ffffff; border-radius:18px; box-shadow:0 20px 38px rgba(15,23,42,0.12); overflow:hidden;" bgcolor="#ffffff">
+                  <tr>
+                    <td bgcolor="#2563eb" style="background-color:#2563eb; padding:28px 32px; color:#ffffff; font-family:'Segoe UI', Arial, sans-serif;">
+                      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em;">Thank you for serving!</h1>
+                      <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">We're grateful to have you on the team for <strong>${event.name}</strong>.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
+                      <p style="margin:0 0 16px; font-size:16px;">Hi ${volunteer.name || volunteer.email},</p>
+                      <p style="margin:0 0 16px; color:#475569; line-height:1.7;">Thank you for lending your time and heart to serve. Below you'll find your volunteer schedule details.</p>
+                      ${htmlList}
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:32px auto 28px;">
+                        <tr>
+                          <td align="center" role="presentation">
+                            <!--[if mso]>
+                              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${manageUrl}" style="height:48px; v-text-anchor:middle; width:240px;" arcsize="50%" stroke="f" fillcolor="#2563eb">
+                                <w:anchorlock/>
+                                <center style="color:#ffffff; font-family:'Segoe UI', Arial, sans-serif; font-size:15px; font-weight:600;">
+                                  Manage Your Signup
+                                </center>
+                              </v:roundrect>
+                            <![endif]-->
+                            <!--[if !mso]><!-- -->
+                              <a href="${manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
+                                Manage Your Signup
+                              </a>
+                            <!--<![endif]-->
+                          </td>
+                        </tr>
+                      </table>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(15,23,42,0.08); margin-top:24px; padding-top:24px;">
+                        <tr>
+                          <td style="font-family:'Segoe UI', Arial, sans-serif;">
+                            <p style="margin:0 0 12px; font-weight:600; color:#0f172a;">Need a hand?</p>
+                            <p style="margin:0; color:#475569; line-height:1.7;">Our team is here to help with any changes or questions. Reach out at <a href="mailto:admin@harvestchurch.ca" style="color:#2563eb; font-weight:600;">admin@harvestchurch.ca</a> or call <a href="tel:12503902152" style="color:#2563eb; font-weight:600;">2503902152</a>.</p>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>Harvest Church Volunteer Team</strong></p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td bgcolor="#f3f6fb" style="background-color:#f3f6fb; padding:18px 32px; text-align:center; color:#94a3b8; font-size:13px; font-family:'Segoe UI', Arial, sans-serif;">
+                      If you did not request this email you can ignore it.
+                    </td>
+                  </tr>
+                </table>
+                <!--[if mso]>
+                      </td>
+                    </tr>
+                  </table>
+                <![endif]-->
+              </td>
+            </tr>
+          </table>
+        </div>
+      </body>
+    </html>`;
 
   try {
     await sendMail({

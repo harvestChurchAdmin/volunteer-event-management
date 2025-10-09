@@ -122,7 +122,7 @@ function issueManageToken(volunteerId, eventId) {
 }
 
 /**
- * Sends the transactional email letting volunteers know which slots they have
+ * Sends the transactional email letting volunteers know which opportunities they have
  * reserved. The same template is reused for new sign-ups and updates.
  */
 async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl, isUpdate }) {
@@ -134,7 +134,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
 
   const listItems = reservations.length
     ? reservations.map(slot => `- ${slot.station}: ${slot.start} – ${slot.end}`).join('\n')
-    : 'You currently have no reserved slots.';
+    : 'You currently have no reserved opportunities.';
 
   const text = `Hi ${volunteer.name || volunteer.email},\n\n` +
     `Here is your schedule for "${event.name}":\n${listItems}\n\n` +
@@ -143,7 +143,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
 
   const htmlList = reservations.length
     ? `<ul>${reservations.map(slot => `<li><strong>${slot.station}</strong>: ${slot.start} – ${slot.end}</li>`).join('')}</ul>`
-    : '<p>You currently have no reserved slots.</p>';
+    : '<p>You currently have no reserved opportunities.</p>';
 
   const html = `
     <p>Hi ${volunteer.name || volunteer.email},</p>

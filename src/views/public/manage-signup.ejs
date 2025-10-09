@@ -4,7 +4,7 @@
   <div>
     <a href="/events" class="btn-link">&larr; Back to events</a>
     <h1>Manage your signup for <%= event.name %></h1>
-    <p class="page-subtitle">Update or cancel your reserved slots below and click “Save changes” when you are done.</p>
+    <p class="page-subtitle">Update or cancel your reserved opportunities below and click “Save changes” when you are done.</p>
   </div>
 </section>
 
@@ -39,7 +39,7 @@
 <section class="page-section page-shell">
   <div class="slot-toolbar">
     <div class="slot-toolbar__group">
-      <label class="slot-toolbar__label" for="slot-view-mode">View slots by</label>
+      <label class="slot-toolbar__label" for="slot-view-mode">View opportunities by</label>
       <select id="slot-view-mode" class="slot-toolbar__select">
         <option value="station" selected>Station</option>
         <option value="time">Date &amp; time</option>
@@ -125,7 +125,7 @@
   <div id="signup-form" class="card card--plain signup-panel" style="display:block;">
     <div id="selected-slots-container"></div>
     <h2>Save your changes</h2>
-    <p class="muted">Select or deselect any slots above, then save. You can also remove all slots to cancel your signup.</p>
+    <p class="muted">Select or deselect any opportunities above, then save. You can also remove all selections to cancel your signup.</p>
     <form id="signupFormTag" action="/manage/<%= token %>" method="POST" novalidate data-mode="manage">
       <div class="card-actions">
         <button type="submit" class="btn btn-primary">Save changes</button>

@@ -1,7 +1,7 @@
 // src/public/js/main.js
 // Public-side behaviors (CSP-safe; no inline JS).
 // IMPORTANT: We do NOT convert times. We display exactly what the server rendered.
-// The Selected Times list is built from the UI text inside each slot.
+// The Selected Times list is built from the UI text inside each opportunity.
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM fully loaded. Initializing scripts.');
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // State: selected slots -> we store metadata needed for conflicts and rendering.
+    // State: selected opportunities -> we store metadata needed for conflicts and rendering.
     let selectedSlots = []; // { id, displayText, start, end, stationId, stationName }
     const originalPlacement = new Map(); // blockId -> { parent, placeholder }
 
@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (note) {
           const message = conflicts.length === 1
             ? `Conflicts with ${formatSlotForMessage(conflicts[0])}`
-            : 'Conflicts with another selected slot';
+            : 'Conflicts with other selected opportunities';
           note.textContent = message;
           note.hidden = false;
         }
@@ -270,13 +270,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderSelectedList() {
       selectedSlotsContainer.innerHTML = '';
       const title = document.createElement('h4');
-      title.textContent = 'Selected Slots';
+      title.textContent = 'Selected Opportunities';
       selectedSlotsContainer.appendChild(title);
 
       if (!selectedSlots.length) {
         const empty = document.createElement('p');
         empty.className = 'muted';
-        empty.textContent = 'No slots selected.';
+        empty.textContent = 'No opportunities selected.';
         selectedSlotsContainer.appendChild(empty);
         return;
       }
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const hint = document.createElement('p');
       hint.className = 'selected-hint';
-      hint.textContent = 'Complete the form below to confirm your selected slots.';
+      hint.textContent = 'Complete the form below to confirm your selected opportunities.';
       selectedSlotsContainer.appendChild(hint);
 
       console.debug('[VolunteerUI] Selected list rendered:', selectedSlots.map(s => ({ id: s.id, displayText: s.displayText })));
@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      console.debug('[VolunteerUI] Selected slots:', selectedSlots);
+      console.debug('[VolunteerUI] Selected opportunities:', selectedSlots);
     }
 
     // Pre-populate from any items already marked as selected (manage experience)

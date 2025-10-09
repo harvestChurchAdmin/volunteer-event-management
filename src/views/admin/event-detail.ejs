@@ -88,7 +88,7 @@ const slotPercent = slotTotals.capacity > 0
           <strong><%= slotTotals.filled %></strong> filled
         </span>
         <span class="event-slot-summary__slash">/</span>
-        <span class="event-slot-summary__metric"><%= slotTotals.capacity %> total slots</span>
+        <span class="event-slot-summary__metric"><%= slotTotals.capacity %> total opportunities</span>
         <span class="event-slot-summary__pct">(<%= slotPercent %>% full)</span>
       </div>
     <% } %>
@@ -152,7 +152,7 @@ const slotPercent = slotTotals.capacity > 0
                     </span>
                   </span>
                 </div>
-                <span class="sr-only station-card__sr-metrics">Filled <%= stationTotals.filled %> of <%= stationTotals.capacity %> slots</span>
+                <span class="sr-only station-card__sr-metrics">Filled <%= stationTotals.filled %> of <%= stationTotals.capacity %> opportunities</span>
               </div>
             </div>
             <div class="station-card__header-actions">

@@ -31,7 +31,7 @@
   <section class="page-section page-shell">
     <div class="slot-toolbar">
       <div class="slot-toolbar__group">
-        <label class="slot-toolbar__label" for="slot-view-mode">View slots by</label>
+        <label class="slot-toolbar__label" for="slot-view-mode">View opportunities by</label>
         <select id="slot-view-mode" class="slot-toolbar__select">
           <option value="station" selected>Station</option>
           <option value="time">Date &amp; time</option>
@@ -134,7 +134,7 @@
           </div>
         </div>
         <div class="card-actions">
-          <button type="submit" class="btn btn-primary">Confirm selected slots</button>
+          <button type="submit" class="btn btn-primary">Confirm selected opportunities</button>
         </div>
       </form>
     </div>
@@ -142,8 +142,8 @@
 <% } else { %>
   <section class="page-section page-shell">
     <article class="card card--plain empty-state">
-      <h2>No volunteer slots yet</h2>
-      <p class="muted">There are no volunteer slots available for this event yet. Please check back soon or reach out to the coordinator.</p>
+      <h2>No volunteer opportunities yet</h2>
+      <p class="muted">There are no volunteer opportunities available for this event yet. Please check back soon or reach out to the coordinator.</p>
       <div class="action-row">
         <a class="btn btn-ghost" href="/events">Back to opportunities</a>
       </div>
@@ -154,5 +154,5 @@
 <%- include('../partials/footer') %>
 
 <div id="selection-fab" class="selection-fab" hidden>
-  <button type="button" class="selection-fab__button">Review selected slots</button>
+  <button type="button" class="selection-fab__button">Review selections</button>
 </div>

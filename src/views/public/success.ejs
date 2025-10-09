@@ -16,10 +16,10 @@
   <article class="card card--plain empty-state">
     <% if (alreadyRegistered) { %>
       <h2>We’ve got you covered</h2>
-      <p>You were already registered for your selected slots. We just resent the manage link to <strong><%= volunteerEmail %></strong>. If you don’t see it, please check your junk or spam folder.</p>
+      <p>You were already registered for your selected opportunities. We just resent the manage link to <strong><%= volunteerEmail %></strong>. If you don’t see it, please check your junk or spam folder.</p>
     <% } else { %>
       <h2>You're all set 🎉</h2>
-      <p>You reserved <strong><%= count %></strong> <%= count === 1 ? 'slot' : 'slots' %>. A confirmation email is on its way.</p>
+      <p>You reserved <strong><%= count %></strong> <%= count === 1 ? 'opportunity' : 'opportunities' %>. A confirmation email is on its way.</p>
     <% } %>
     <div class="action-row">
       <a href="/events" class="btn btn-primary">Browse more opportunities</a>

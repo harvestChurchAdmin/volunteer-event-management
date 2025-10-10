@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // State: selected opportunities -> we store metadata needed for conflicts and rendering.
-    let selectedSlots = []; // { id, displayText, start, end, stationId, stationName }
+    let selectedSlots = []; // { id, displayText, start, end, stationId, stationName, startLabel, endLabel, startRaw, endRaw }
     const originalPlacement = new Map(); // blockId -> { parent, placeholder }
 
     function updateSelectionFabVisibility() {
@@ -144,12 +144,28 @@ document.addEventListener('DOMContentLoaded', () => {
       if (typeof item.dataset.endTs === 'undefined') {
         item.dataset.endTs = String(computeTimestamp(endRaw));
       }
+      const infoDiv = item.querySelector('.time-block-item__info');
+      let startLabel = '';
+      let endLabel = '';
+      if (infoDiv) {
+        const strongs = infoDiv.querySelectorAll('strong');
+        if (strongs.length > 0) {
+          startLabel = (strongs[0].textContent || '').trim();
+        }
+        if (strongs.length > 1) {
+          endLabel = (strongs[1].textContent || '').trim();
+        }
+      }
       return {
         id,
         stationId,
         stationName,
         start: Number(item.dataset.startTs),
-        end: Number(item.dataset.endTs)
+        end: Number(item.dataset.endTs),
+        startLabel,
+        endLabel,
+        startRaw,
+        endRaw
       };
     }
 
@@ -181,6 +197,66 @@ document.addEventListener('DOMContentLoaded', () => {
       if (slot.stationName) parts.push(slot.stationName);
       return parts.length ? parts.join(' — ') : '(unknown)';
     }
+    function splitDateAndTime(label) {
+      if (!label) {
+        return { date: '', time: '' };
+      }
+      const trimmed = label.trim();
+      if (!trimmed) {
+        return { date: '', time: '' };
+      }
+      const commaParts = trimmed.split(',');
+      if (commaParts.length >= 3) {
+        return {
+          date: `${commaParts[0].trim()}, ${commaParts[1].trim()}`,
+          time: commaParts.slice(2).join(',').trim()
+        };
+      }
+      if (commaParts.length === 2) {
+        const [first, second] = commaParts;
+        const maybeTime = second.trim();
+        if (maybeTime) {
+          return { date: first.trim(), time: maybeTime };
+        }
+      }
+      const spaceParts = trimmed.split(/\s+/);
+      if (spaceParts.length >= 2) {
+        return {
+          date: spaceParts.slice(0, spaceParts.length - 1).join(' '),
+          time: spaceParts[spaceParts.length - 1]
+        };
+      }
+      return { date: trimmed, time: '' };
+    }
+
+    function formatSelectedSlotTime(slot) {
+      const { startLabel = '', endLabel = '' } = slot || {};
+      const fallback = slot && slot.displayText ? slot.displayText : '';
+      if (!startLabel && !endLabel) {
+        return fallback;
+      }
+      const startParts = splitDateAndTime(startLabel);
+      const endParts = splitDateAndTime(endLabel);
+      const hasStart = Boolean(startLabel);
+      const hasEnd = Boolean(endLabel);
+      const sameDay = startParts.date && endParts.date && startParts.date === endParts.date;
+
+      if (sameDay) {
+        if (startParts.time && endParts.time) {
+          return `${startParts.date} • ${startParts.time} – ${endParts.time}`;
+        }
+        return endParts.time
+          ? `${startParts.date} • ${endParts.time}`
+          : startLabel;
+      }
+
+      if (hasStart && hasEnd) {
+        return `${startLabel} → ${endLabel}`;
+      }
+
+      return hasStart ? startLabel : endLabel;
+    }
+
 
     function slotsOverlap(a, b) {
       if (!a || !b) return false;
@@ -267,6 +343,33 @@ document.addEventListener('DOMContentLoaded', () => {
       return [];
     }
 
+        function compareSlots(a, b) {
+      const startA = Number.isFinite(a.start) ? a.start : Number.POSITIVE_INFINITY;
+      const startB = Number.isFinite(b.start) ? b.start : Number.POSITIVE_INFINITY;
+      if (startA !== startB) {
+        return startA - startB;
+      }
+      const endA = Number.isFinite(a.end) ? a.end : Number.POSITIVE_INFINITY;
+      const endB = Number.isFinite(b.end) ? b.end : Number.POSITIVE_INFINITY;
+      if (endA !== endB) {
+        return endA - endB;
+      }
+      const stationA = (a.stationName || '').toLowerCase();
+      const stationB = (b.stationName || '').toLowerCase();
+      if (stationA !== stationB) {
+        return stationA.localeCompare(stationB);
+      }
+      const textA = (a.displayText || '').toLowerCase();
+      const textB = (b.displayText || '').toLowerCase();
+      return textA.localeCompare(textB);
+    }
+
+    function sortSelectedSlots() {
+      if (selectedSlots.length <= 1) return;
+      selectedSlots.sort(compareSlots);
+    }
+
+
     function renderSelectedList() {
       selectedSlotsContainer.innerHTML = '';
       const title = document.createElement('h4');
@@ -281,12 +384,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      sortSelectedSlots();
+
       const ul = document.createElement('ul');
       selectedSlots.forEach(slot => {
         const li = document.createElement('li');
-        const text = document.createElement('span');
-        text.textContent = slot.displayText;
-        li.appendChild(text);
+        li.classList.add('selected-slot');
+
+        const textWrap = document.createElement('div');
+        textWrap.className = 'selected-slot__text';
+
+        const stationLine = document.createElement('span');
+        stationLine.className = 'selected-slot__station';
+        stationLine.textContent = slot.stationName || slot.displayText || 'Selected opportunity';
+        textWrap.appendChild(stationLine);
+
+        const timeLine = document.createElement('span');
+        timeLine.className = 'selected-slot__time';
+        timeLine.textContent = formatSelectedSlotTime(slot);
+        textWrap.appendChild(timeLine);
+
+        li.appendChild(textWrap);
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -362,6 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const displayText = getDisplayTextFromItem(item);
 
         selectedSlots.push({ id, displayText, ...slotMeta });
+        sortSelectedSlots();
         item.classList.add('selected');
         item.setAttribute('aria-pressed', 'true');
         const btn = item.querySelector('.select-slot-btn');

@@ -1463,10 +1463,30 @@ body.app-shell {
 
 #selected-slots-container li {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.45rem;
+}
+
+.selected-slot__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.selected-slot__station {
+  font-weight: 600;
+  color: var(--text-strong);
+  word-break: break-word;
+}
+
+.selected-slot__time {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  word-break: break-word;
 }
 
 #selected-slots-container li:last-child {

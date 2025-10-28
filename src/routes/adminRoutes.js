@@ -7,6 +7,8 @@ const { isAuthenticated } = require('../middleware/authMiddleware');
 // Dashboard & event detail ----------------------------------------------------
 router.get('/dashboard', isAuthenticated, adminController.showDashboard);
 router.get('/event/:eventId', isAuthenticated, adminController.showEventDetail);
+// CSV export of event volunteers
+router.get('/event/:eventId/export.csv', isAuthenticated, adminController.exportEventCsvAdvanced);
 
 // Create ----------------------------------------------------------------------
 router.post('/event', isAuthenticated, adminController.createEvent);

@@ -94,6 +94,8 @@ const slotPercent = slotTotals.capacity > 0
     <% } %>
   </div>
   <div class="page-header__actions">
+    <a class="btn btn-secondary" href="/admin/event/<%= event.event_id %>/export.csv">Quick Export</a>
+    <button class="btn btn-ghost" data-open="#exportCsvModal">Export options</button>
     <form action="/admin/event/<%= event.event_id %>/publish" method="POST">
       <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
       <input type="hidden" name="redirectTo" value="/admin/event/<%= event.event_id %>">
@@ -534,3 +536,91 @@ const slotPercent = slotTotals.capacity > 0
 <%- include('../partials/modal-end', { id: 'timeBlockModal', formId: 'timeBlockForm' }) %>
 
 <%- include('../partials/footer') %>
+
+<!-- Export CSV Options Modal -->
+<%- include('../partials/modal-start', { id: 'exportCsvModal', title: 'Export Options' }) %>
+  <form id="exportCsvForm" action="/admin/event/<%= event.event_id %>/export.csv" method="GET" novalidate>
+    <fieldset>
+      <legend>Columns</legend>
+      <div class="form-grid two">
+        <div>
+          <strong>Event</strong>
+          <label><input type="checkbox" name="fields" value="event_id"> Event ID</label>
+          <label><input type="checkbox" name="fields" value="event_name" checked> Event</label>
+          <label><input type="checkbox" name="fields" value="event_description"> Description</label>
+          <label><input type="checkbox" name="fields" value="event_start" checked> Event Start</label>
+          <label><input type="checkbox" name="fields" value="event_end" checked> Event End</label>
+        </div>
+        <div>
+          <strong>Station</strong>
+          <label><input type="checkbox" name="fields" value="station_id"> Station ID</label>
+          <label><input type="checkbox" name="fields" value="station_name" checked> Station</label>
+          <label><input type="checkbox" name="fields" value="station_about"> About</label>
+          <label><input type="checkbox" name="fields" value="station_duties"> Duties</label>
+        </div>
+        <div>
+          <strong>Time Block</strong>
+          <label><input type="checkbox" name="fields" value="block_id"> Block ID</label>
+          <label><input type="checkbox" name="fields" value="block_start" checked> Block Start</label>
+          <label><input type="checkbox" name="fields" value="block_end" checked> Block End</label>
+          <label><input type="checkbox" name="fields" value="capacity_needed"> Capacity</label>
+          <label><input type="checkbox" name="fields" value="reserved_count"> Reserved Count</label>
+          <label><input type="checkbox" name="fields" value="is_full"> Is Full</label>
+        </div>
+        <div>
+          <strong>Volunteer</strong>
+          <label><input type="checkbox" name="fields" value="volunteer_id"> Volunteer ID</label>
+          <label><input type="checkbox" name="fields" value="volunteer_name" checked> Name</label>
+          <label><input type="checkbox" name="fields" value="volunteer_email" checked> Email</label>
+          <label><input type="checkbox" name="fields" value="volunteer_phone" checked> Phone</label>
+          <label><input type="checkbox" name="fields" value="reservation_id"> Reservation ID</label>
+          <label><input type="checkbox" name="fields" value="reservation_date" checked> Reservation Date</label>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sort</legend>
+      <select name="sort">
+        <option value="time_station_name" selected>Time, then Station, then Name</option>
+        <option value="station_time_name">Station, then Time, then Name</option>
+        <option value="station_only">Station, then Name</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Filter</legend>
+      <div class="form-grid two">
+        <div class="form-group">
+          <label for="export-stations">Stations</label>
+          <select id="export-stations" name="station_id" multiple size="5">
+            <% stations.forEach(function(s) { %>
+              <option value="<%= s.station_id %>"><%= s.name %></option>
+            <% }) %>
+          </select>
+          <p class="muted">Hold Ctrl/Cmd to select multiple</p>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="export-start-visible">Start on/after</label>
+            <input type="hidden" id="export-start" name="start" value="">
+            <input type="datetime-local"
+                   id="export-start-visible"
+                   class="datetime-field"
+                   data-canonical-target="export-start"
+                   step="900">
+          </div>
+          <div class="form-group">
+            <label for="export-end-visible">End on/before</label>
+            <input type="hidden" id="export-end" name="end" value="">
+            <input type="datetime-local"
+                   id="export-end-visible"
+                   class="datetime-field"
+                   data-canonical-target="export-end"
+                   step="900">
+          </div>
+        </div>
+      </div>
+    </fieldset>
+  </form>
+<%- include('../partials/modal-end', { id: 'exportCsvModal', formId: 'exportCsvForm', footer: undefined }) %>

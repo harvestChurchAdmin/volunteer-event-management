@@ -24,6 +24,169 @@ exports.showEventDetail = (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+/**
+ * Export the event roster (volunteers) as a CSV, arranged by time, date, and station.
+ */
+exports.exportEventCsv = (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    // Parse export options from query
+    const q = req.query || {};
+    // fields may be repeated or comma-separated
+    let fields = [];
+    if (Array.isArray(q.fields)) {
+      fields = q.fields.flatMap(f => String(f).split(',')).map(s => s.trim()).filter(Boolean);
+    } else if (typeof q.fields === 'string') {
+      fields = String(q.fields).split(',').map(s => s.trim()).filter(Boolean);
+    }
+    const stationIds = [];
+    const addStationId = (v) => { const n = Number(v); if (Number.isFinite(n)) stationIds.push(n); };
+    if (Array.isArray(q.station_id)) q.station_id.forEach(addStationId);
+    else if (q.station_id) String(q.station_id).split(',').forEach(addStationId);
+    const start = q.start || q.start_time || '';
+    const end = q.end || q.end_time || '';
+    const sort = q.sort || 'time_station_name';
+    const payload = adminService.getEventRosterForExport(eventId, { stationIds, start, end, sort });
+    if (!payload || !payload.event) return next(new Error('Event not found'));
+
+    const { event, rows } = payload;
+    const filenameSafe = String(event.name || 'event').replace(/[^A-Za-z0-9._-]+/g, '_');
+    const filename = `${filenameSafe}_${event.event_id}.csv`;
+
+    // CSV header
+    const headers = [
+      'Event',
+      'Event Start',
+      'Event End',
+      'Station',
+      'Block Start',
+      'Block End',
+      'Volunteer Name',
+      'Volunteer Email',
+      'Volunteer Phone',
+      'Reservation Date'
+    ];
+
+    function csvEscape(v) {
+      const s = v == null ? '' : String(v);
+      if (/[",\n\r]/.test(s)) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    const lines = [];
+    lines.push(headers.map(csvEscape).join(','));
+    rows.forEach(r => {
+      lines.push([
+        event.name,
+        event.date_start,
+        event.date_end,
+        r.station,
+        r.block_start,
+        r.block_end,
+        r.volunteer_name,
+        r.volunteer_email,
+        r.volunteer_phone,
+        r.reservation_date
+      ].map(csvEscape).join(','));
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(lines.join('\n'));
+  } catch (e) { next(e); }
+};
+
+/**
+ * Advanced CSV export with selectable fields, sorting, and basic filters.
+ */
+exports.exportEventCsvAdvanced = (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const q = req.query || {};
+
+    // fields may be repeated or comma-separated
+    let fields = [];
+    if (Array.isArray(q.fields)) {
+      fields = q.fields.flatMap(f => String(f).split(',')).map(s => s.trim()).filter(Boolean);
+    } else if (typeof q.fields === 'string') {
+      fields = String(q.fields).split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    // Filters
+    const stationIds = [];
+    const addStationId = (v) => { const n = Number(v); if (Number.isFinite(n)) stationIds.push(n); };
+    if (Array.isArray(q.station_id)) q.station_id.forEach(addStationId);
+    else if (q.station_id) String(q.station_id).split(',').forEach(addStationId);
+    const start = q.start || q.start_time || '';
+    const end = q.end || q.end_time || '';
+    const sort = q.sort || 'time_station_name';
+
+    const payload = adminService.getEventRosterForExport(eventId, { stationIds, start, end, sort });
+    if (!payload || !payload.event) return next(new Error('Event not found'));
+
+    const { event, rows } = payload;
+    const filenameSafe = String(event.name || 'event').replace(/[^A-Za-z0-9._-]+/g, '_');
+    const filename = `${filenameSafe}_${event.event_id}.csv`;
+
+    // Field mapping and default set
+    const FIELD_MAP = {
+      event_id: ['event_id', 'Event ID'],
+      event_name: ['event_name', 'Event'],
+      event_description: ['event_description', 'Event Description'],
+      event_start: ['event_start', 'Event Start'],
+      event_end: ['event_end', 'Event End'],
+      station_id: ['station_id', 'Station ID'],
+      station_name: ['station_name', 'Station'],
+      station_about: ['station_about', 'Station About'],
+      station_duties: ['station_duties', 'Station Duties'],
+      block_id: ['block_id', 'Block ID'],
+      block_start: ['block_start', 'Block Start'],
+      block_end: ['block_end', 'Block End'],
+      capacity_needed: ['capacity_needed', 'Capacity Needed'],
+      reserved_count: ['reserved_count', 'Reserved Count'],
+      is_full: ['is_full', 'Is Full'],
+      reservation_id: ['reservation_id', 'Reservation ID'],
+      reservation_date: ['reservation_date', 'Reservation Date'],
+      volunteer_id: ['volunteer_id', 'Volunteer ID'],
+      volunteer_name: ['volunteer_name', 'Volunteer Name'],
+      volunteer_email: ['volunteer_email', 'Volunteer Email'],
+      volunteer_phone: ['volunteer_phone', 'Volunteer Phone']
+    };
+
+    const DEFAULT_FIELDS = [
+      'event_name', 'event_start', 'event_end',
+      'station_name', 'block_start', 'block_end',
+      'volunteer_name', 'volunteer_email', 'volunteer_phone',
+      'reservation_date'
+    ];
+
+    const chosen = (fields && fields.length ? fields : DEFAULT_FIELDS)
+      .filter(key => FIELD_MAP[key])
+      .map(key => ({ key, prop: FIELD_MAP[key][0], header: FIELD_MAP[key][1] }));
+
+    function csvEscapeSafe(v) {
+      let s = v == null ? '' : String(v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s; // mitigate CSV injection
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    const lines = [];
+    lines.push(chosen.map(c => csvEscapeSafe(c.header)).join(','));
+    rows.forEach(r => {
+      lines.push(
+        chosen.map(c => csvEscapeSafe(r[c.prop])).join(',')
+      );
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(lines.join('\n'));
+  } catch (e) { next(e); }
+};
+
 // ----------------------------------------------------------------------------- 
 // Create
 // -----------------------------------------------------------------------------

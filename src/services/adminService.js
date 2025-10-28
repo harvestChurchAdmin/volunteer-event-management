@@ -120,6 +120,90 @@ function getEventDetailsForAdmin(eventId) {
 }
 
 /**
+ * Create a flat, sorted roster for CSV export including volunteer contact info.
+ * Sorted by time block start (datetime), then station name, then volunteer name.
+ */
+function getEventRosterForExport(eventId, opts = {}) {
+  const event = getEventDetailsForAdmin(eventId);
+  if (!event) return null;
+
+  const rows = [];
+  const stations = Array.isArray(event.stations) ? event.stations : [];
+  stations.forEach(station => {
+    const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : [];
+    blocks.forEach(block => {
+      const reservations = Array.isArray(block.reservations) ? block.reservations : [];
+      reservations.forEach(res => {
+        rows.push({
+          // Event
+          event_id: event.event_id,
+          event_name: event.name,
+          event_description: event.description || '',
+          event_start: event.date_start,
+          event_end: event.date_end,
+          // Station
+          station_id: station.station_id,
+          station_name: station.name,
+          station_about: station.about || '',
+          station_duties: station.duties || '',
+          // Block
+          block_id: block.block_id,
+          block_start: block.start_time,
+          block_end: block.end_time,
+          capacity_needed: block.capacity_needed,
+          reserved_count: Array.isArray(block.reservations) ? block.reservations.length : (block.reserved_count || 0),
+          is_full: !!block.is_full,
+          // Volunteer & reservation
+          reservation_id: res.reservation_id,
+          reservation_date: res.reservation_date,
+          volunteer_id: res.volunteer_id,
+          volunteer_name: res.name,
+          volunteer_email: res.email,
+          volunteer_phone: res.phone || ''
+        });
+      });
+    });
+  });
+
+  // Filtering ---------------------------------------------------------------
+  const stationFilter = Array.isArray(opts.stationIds) ? opts.stationIds.map(Number).filter(Number.isFinite) : [];
+  let startCanon = null;
+  let endCanon = null;
+  try { if (opts.start) startCanon = toCanonicalLocalString(String(opts.start)); } catch (_) {}
+  try { if (opts.end) endCanon = toCanonicalLocalString(String(opts.end)); } catch (_) {}
+
+  const filtered = rows.filter(r => {
+    if (stationFilter.length && !stationFilter.includes(Number(r.station_id))) return false;
+    if (startCanon && cmpLocal(toCanonicalLocalString(r.block_start), startCanon) < 0) return false;
+    if (endCanon && cmpLocal(toCanonicalLocalString(r.block_start), endCanon) > 0) return false;
+    return true;
+  });
+
+  // Sorting -----------------------------------------------------------------
+  const sortMode = String(opts.sort || 'time_station_name');
+  const cmpText = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
+  const cmpNum = (a, b) => (Number(a) || 0) - (Number(b) || 0);
+
+  const sorted = filtered.sort((a, b) => {
+    if (sortMode === 'station_time_name') {
+      const s = cmpText(a.station_name, b.station_name); if (s) return s;
+      const t = cmpLocal(toCanonicalLocalString(a.block_start), toCanonicalLocalString(b.block_start)); if (t) return t;
+      return cmpText(a.volunteer_name, b.volunteer_name);
+    }
+    if (sortMode === 'station_only') {
+      const s = cmpText(a.station_name, b.station_name); if (s) return s;
+      return cmpText(a.volunteer_name, b.volunteer_name);
+    }
+    // Default: time -> station -> volunteer
+    const t = cmpLocal(toCanonicalLocalString(a.block_start), toCanonicalLocalString(b.block_start)); if (t) return t;
+    const s = cmpText(a.station_name, b.station_name); if (s) return s;
+    return cmpText(a.volunteer_name, b.volunteer_name);
+  });
+
+  return { event, rows: sorted };
+}
+
+/**
  * Load a single station and its time blocks for the admin detail view. Similar
  * to `getEventDetailsForAdmin` but scoped to one station.
  */
@@ -427,4 +511,5 @@ module.exports = {
   deleteEvent,
   deleteStation,
   deleteTimeBlock,
+  getEventRosterForExport,
 };

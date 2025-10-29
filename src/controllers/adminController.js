@@ -187,6 +187,38 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+/**
+ * Render a print-friendly roster view that admins can "Save as PDF" via the browser.
+ * Shows event header, then stations with their time blocks and volunteer contact info.
+ */
+exports.exportEventPrintView = (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const helpers = require('../views/helpers');
+    const event = adminService.getEventDetailsForAdmin(eventId);
+    if (!event) return next(new Error('Event not found'));
+
+    // Sort blocks within each station chronologically for consistent output
+    const stations = (Array.isArray(event.stations) ? event.stations : [])
+      .map(st => {
+        const blocks = Array.isArray(st.time_blocks) ? st.time_blocks.slice() : [];
+        blocks.sort((a, b) => {
+          const A = helpers.canonicalLocal(a.start_time);
+          const B = helpers.canonicalLocal(b.start_time);
+          return A.localeCompare(B);
+        });
+        return { ...st, time_blocks: blocks };
+      });
+
+    res.render('admin/event-print', {
+      title: `Printable Roster`,
+      event: { ...event, stations },
+      helpers,
+      messages: req.flash()
+    });
+  } catch (e) { next(e); }
+};
+
 // ----------------------------------------------------------------------------- 
 // Create
 // -----------------------------------------------------------------------------

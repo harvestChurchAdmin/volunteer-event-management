@@ -55,6 +55,26 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[AccountMenu] Failed to wire outside/esc close:', err);
   }
 
+  // Print helpers (CSP-safe; no inline handlers)
+  try {
+    const params = new URLSearchParams(location.search || '');
+    const auto = params.get('auto');
+    const printBtn = document.querySelector('[data-action="print"]');
+    if (printBtn) {
+      printBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        try { window.print(); } catch (err) { console.error('[Print] Failed to invoke print:', err); }
+      });
+    }
+    if (auto === '1') {
+      setTimeout(() => {
+        try { window.print(); } catch (err) { console.error('[Print] Auto print failed:', err); }
+      }, 200);
+    }
+  } catch (err) {
+    console.error('[Print] Initialization error:', err);
+  }
+
   // Generic dropdowns (details.dropdown) — stable + floating portal for dashboard
   try {
 

@@ -97,13 +97,17 @@ const slotPercent = slotTotals.capacity > 0
     <details class="dropdown">
       <summary class="btn btn-accent">Actions</summary>
       <div class="dropdown__menu">
+        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/print?auto=1" target="_blank" rel="noopener">
+          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 9V3h12v6h2a2 2 0 0 1 2 2v6h-4v4H8v-4H4v-6a2 2 0 0 1 2-2h0Zm2-4v4h8V5H8Zm8 10H8v4h8v-4Z"/></svg>
+          Printable PDF
+        </a>
         <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
           Quick Export
         </a>
         <button class="dropdown__link" data-open="#exportCsvModal" type="button">
           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
-          Export options…
+          Advanced Export
         </button>
         <button class="dropdown__link" data-open="#editEventModal" type="button">
           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
@@ -584,7 +588,7 @@ const slotPercent = slotTotals.capacity > 0
 <%- include('../partials/footer') %>
 
 <!-- Export CSV Options Modal -->
-<%- include('../partials/modal-start', { id: 'exportCsvModal', title: 'Export Options' }) %>
+<%- include('../partials/modal-start', { id: 'exportCsvModal', title: 'Advanced Export' }) %>
   <form id="exportCsvForm" action="/admin/event/<%= event.event_id %>/export.csv" method="GET" novalidate>
     <fieldset>
       <legend>Columns</legend>

@@ -1,0 +1,92 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'admin' }) %>
+
+<% const { fmt12 } = helpers; %>
+
+<style>
+  /* Print-friendly styles scoped to this page */
+  @media print {
+    .topbar, .site-footer, .print-actions { display: none !important; }
+    body { background: white !important; }
+    .page-shell { width: 100% !important; margin: 0 !important; }
+    .card { box-shadow: none !important; border: 1px solid #e5e7eb; }
+    .time-block { page-break-inside: avoid; }
+  }
+  .print-actions { display: flex; gap: 0.5rem; }
+  .roster-section { margin-bottom: 1.5rem; }
+  .roster-station { margin-bottom: 1rem; }
+  .time-block { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin: 0.5rem 0; background: var(--surface); }
+  .time-block__header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 0.35rem; }
+  .time-block__meta { color: var(--text-soft); font-size: 0.95rem; }
+  .vol-list { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+  .vol-list li { margin: 0.15rem 0; }
+  .vol-contact { color: var(--text-soft); }
+</style>
+
+<section class="page-header page-shell">
+  <div>
+    <a href="/admin/event/<%= event.event_id %>" class="btn-link">&larr; Back to manage</a>
+    <h1><%= event.name %></h1>
+    <% if (event.description) { %>
+      <p class="muted"><%= event.description %></p>
+    <% } %>
+    <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
+  </div>
+  <div class="page-header__actions print-actions">
+    <button class="btn btn-primary" data-action="print">Print / Save as PDF</button>
+  </div>
+  <div class="page-shell" style="padding-top:0.5rem">
+    <p class="muted">Includes stations, time blocks, and volunteer contact details.</p>
+  </div>
+</section>
+
+<section class="page-section page-shell roster-section">
+  <% if (Array.isArray(event.stations) && event.stations.length) { %>
+    <% event.stations.forEach(function(station) { %>
+      <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : []; %>
+      <% if (blocks.length) { %>
+        <article class="card card--plain roster-station">
+          <header class="card-header">
+            <h2>Station: <%= station.name %></h2>
+          </header>
+          <div class="card-body">
+            <% blocks.forEach(function(block) { %>
+              <div class="time-block">
+                <div class="time-block__header">
+                  <div>
+                    <strong><%= fmt12(block.start_time) %></strong>
+                    <span> – </span>
+                    <strong><%= fmt12(block.end_time) %></strong>
+                  </div>
+                  <div class="time-block__meta">
+                    Capacity: <%= block.capacity_needed %> • Signed up: <%= Array.isArray(block.reservations) ? block.reservations.length : (block.reserved_count || 0) %>
+                  </div>
+                </div>
+                <% if (block.reservations && block.reservations.length > 0) { %>
+                  <ol class="vol-list">
+                    <% block.reservations.forEach(function(r) { %>
+                      <li>
+                        <strong><%= r.name %></strong>
+                        <span class="vol-contact"> — <%= r.email %><% if (r.phone) { %> • <%= r.phone %><% } %></span>
+                      </li>
+                    <% }) %>
+                  </ol>
+                <% } else { %>
+                  <p class="muted" style="margin:0.25rem 0 0">No volunteers yet.</p>
+                <% } %>
+              </div>
+            <% }) %>
+          </div>
+        </article>
+      <% } %>
+    <% }) %>
+  <% } else { %>
+    <article class="card card--plain empty-state">
+      <h2>No stations or time blocks</h2>
+      <p class="muted">Add stations and time blocks to generate a printable roster.</p>
+    </article>
+  <% } %>
+</section>
+
+<!-- Print behavior is initialized in /js/main.js to satisfy CSP -->
+
+<%- include('../partials/footer') %>

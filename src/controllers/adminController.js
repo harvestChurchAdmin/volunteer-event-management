@@ -401,3 +401,15 @@ exports.reorderStations = (req, res, next) => {
     res.json({ ok: true });
   } catch (e) { next(e); }
 };
+
+/**
+ * Copy an event's structure (stations and time blocks) into a new draft event.
+ */
+exports.copyEvent = (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const result = adminService.copyEvent(eventId);
+    req.flash('success', 'Event copied. New event is in Draft.');
+    res.redirect('/admin/dashboard');
+  } catch (e) { next(e); }
+};

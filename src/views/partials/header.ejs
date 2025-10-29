@@ -19,6 +19,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="<%= tagline %>">
   <link rel="stylesheet" href="/css/style.css">
+  <% if (brand && (brand.brandColor || brand.accentColor || brand.brandStrongColor)) { %>
+    <style>
+      :root {
+        <% if (brand.brandColor) { %>
+          --brand: <%= brand.brandColor %>;
+          <% /* Derive a stronger brand shade if a specific strong color isn't provided */ %>
+          <% if (!brand.brandStrongColor) { %>
+            --brand-strong: color-mix(in srgb, <%= brand.brandColor %> 82%, black);
+          <% } %>
+        <% } %>
+        <% if (brand.brandStrongColor) { %>
+          --brand-strong: <%= brand.brandStrongColor %>;
+        <% } %>
+        <% if (brand.accentColor) { %>
+          --accent: <%= brand.accentColor %>;
+        <% } %>
+      }
+    </style>
+  <% } %>
   <% if (faviconUrl) { %>
     <link rel="icon" type="image/png" href="<%= faviconUrl %>">
   <% } %>

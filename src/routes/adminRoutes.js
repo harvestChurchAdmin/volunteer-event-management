@@ -9,6 +9,8 @@ router.get('/dashboard', isAuthenticated, adminController.showDashboard);
 router.get('/event/:eventId', isAuthenticated, adminController.showEventDetail);
 // CSV export of event volunteers
 router.get('/event/:eventId/export.csv', isAuthenticated, adminController.exportEventCsvAdvanced);
+// Copy event (structure only, never published)
+router.post('/event/:eventId/copy', isAuthenticated, adminController.copyEvent);
 
 // Create ----------------------------------------------------------------------
 router.post('/event', isAuthenticated, adminController.createEvent);

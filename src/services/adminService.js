@@ -483,6 +483,36 @@ module.exports = {
   getEventDetailsForAdmin,
   getStationDetailsForAdmin,
   /**
+   * Create a new event by copying the structure of an existing one.
+   * Copies: name (with "Copy of"), description, dates, stations, time blocks.
+   * Does NOT copy: publish state (always draft), reservations.
+   */
+  copyEvent: (sourceEventId) => {
+    const src = getEventDetailsForAdmin(sourceEventId);
+    if (!src) throw createError(404, 'Source event not found.');
+
+    const name = `Copy of ${src.name}`;
+    // Ensure canonical strings
+    const startTxt = src.date_start;
+    const endTxt = src.date_end;
+
+    // Create new event (is_published defaults to 0 in DAL)
+    const evRes = dal.admin.createEvent(name, src.description || '', startTxt, endTxt);
+    const newEventId = evRes.lastInsertRowid;
+
+    // Copy stations and blocks in current order; no reservations
+    (Array.isArray(src.stations) ? src.stations : []).forEach(st => {
+      const sRes = dal.admin.createStation(newEventId, st.name, st.about || '', st.duties || '');
+      const newStationId = sRes.lastInsertRowid;
+      const blocks = Array.isArray(st.time_blocks) ? st.time_blocks : [];
+      blocks.forEach(b => {
+        dal.admin.createTimeBlock(newStationId, b.start_time, b.end_time, b.capacity_needed);
+      });
+    });
+
+    return { event_id: newEventId };
+  },
+  /**
    * Reorder stations for an event. Expects an array of { station_id, station_order }.
    */
   reorderStations: (eventId, orderArray) => {

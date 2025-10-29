@@ -36,6 +36,110 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[NavToggle] Failed to initialize responsive navigation toggle:', err);
   }
 
+  // Account menu (header) — close when clicking outside or pressing Esc
+  try {
+    const closeOpenAccountMenus = () => {
+      document.querySelectorAll('details.account-menu[open]').forEach(d => d.removeAttribute('open'));
+    };
+
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details.account-menu[open]').forEach(d => {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeOpenAccountMenus();
+    });
+  } catch (err) {
+    console.error('[AccountMenu] Failed to wire outside/esc close:', err);
+  }
+
+  // Generic dropdowns (details.dropdown) — stable + floating portal for dashboard
+  try {
+
+    const portalMap = new WeakMap(); // details -> { menu, placeholder }
+
+    function openPortal(details) {
+      if (!details.classList.contains('dropdown--float')) return;
+      const summary = details.querySelector('summary');
+      const menu = details.querySelector('.dropdown__menu');
+      if (!summary || !menu) return;
+      if (portalMap.has(details)) return; // already portaled
+      const placeholder = document.createElement('span');
+      placeholder.style.display = 'none';
+      menu.parentNode.insertBefore(placeholder, menu);
+      document.body.appendChild(menu);
+      menu.classList.add('is-portal');
+      // Measure and position
+      const rect = summary.getBoundingClientRect();
+      const menuWidth = 240;
+      const prevDisp = menu.style.display, prevVis = menu.style.visibility;
+      if (getComputedStyle(menu).display === 'none') { menu.style.visibility = 'hidden'; menu.style.display = 'block'; }
+      const menuHeight = Math.max(menu.offsetHeight || 0, 120);
+      menu.style.display = prevDisp; menu.style.visibility = prevVis;
+      let left = rect.right - menuWidth;
+      let top = rect.bottom + 6;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < menuHeight + 12) top = rect.top - menuHeight - 6;
+      left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
+      top = Math.max(8, Math.min(top, window.innerHeight - 8));
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+      menu.style.right = 'auto';
+      portalMap.set(details, { menu, placeholder });
+    }
+
+    function closePortal(details) {
+      const data = portalMap.get(details);
+      if (!data) return;
+      const { menu, placeholder } = data;
+      menu.classList.remove('is-portal');
+      menu.style.left = '';
+      menu.style.top = '';
+      menu.style.right = '';
+      if (placeholder.parentNode) placeholder.parentNode.insertBefore(menu, placeholder);
+      placeholder.remove();
+      portalMap.delete(details);
+    }
+
+    // Close on outside click (consider portaled menus)
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details.dropdown[open]').forEach(d => {
+        const data = portalMap.get(d);
+        const menu = data && data.menu;
+        if (d.contains(e.target)) return;
+        if (menu && menu.contains(e.target)) return;
+        d.removeAttribute('open');
+      });
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      document.querySelectorAll('details.dropdown[open]').forEach(d => d.removeAttribute('open'));
+    });
+
+    // Toggle handler to portal/unportal floating menus
+    document.addEventListener('toggle', (e) => {
+      const el = e.target;
+      if (!(el && el.matches && el.matches('details.dropdown'))) return;
+      if (el.open) {
+        openPortal(el);
+      } else {
+        closePortal(el);
+      }
+    }, true);
+
+    // Reposition on scroll/resize
+    const repro = () => document.querySelectorAll('details.dropdown.dropdown--float[open]').forEach(d => { closePortal(d); openPortal(d); });
+    window.addEventListener('resize', repro);
+    window.addEventListener('scroll', repro, true);
+
+  } catch (err) {
+    console.error('[Dropdowns] Failed to wire outside/esc close:', err);
+  }
+
   // ================================
   // Public Volunteer Multi-Select UI
   // ================================

@@ -390,6 +390,31 @@
       });
     }
 
+    // Preserve scroll + focus when adding or editing a volunteer -------------
+    function rememberScrollAndStationFromForm(form) {
+      try {
+        // Save current scroll position
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+        // Focus the related station on reload, preserving its collapsed state
+        const stationId = form.querySelector('input[name="station_id"]')?.value;
+        if (stationId) {
+          const card = qs('article.station-card[data-station-id="' + stationId + '"]');
+          const payload = {
+            id: stationId,
+            collapsed: card ? card.classList.contains('is-collapsed') : false
+          };
+          sessionStorage.setItem(FOCUS_STATION_KEY, JSON.stringify(payload));
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    qsa('form[id^="addReservationForm-"]').forEach(function(form) {
+      form.addEventListener('submit', function() { rememberScrollAndStationFromForm(form); });
+    });
+    qsa('form[id^="editReservationForm-"]').forEach(function(form) {
+      form.addEventListener('submit', function() { rememberScrollAndStationFromForm(form); });
+    });
+
     // Preserve scroll position + station focus when editing station details ---
     qsa('form[id^="editStationForm-"]').forEach(function(form) {
       if (form.dataset.scrollPersistInit === 'true') return;
@@ -458,6 +483,16 @@
           closeModal(confirmState.modal);
           return;
         }
+        // Remember scroll + station before full page submit
+        try {
+          // Helper may not be defined yet in older builds; guard call
+          if (typeof rememberScrollAndStationFromForm === 'function') {
+            rememberScrollAndStationFromForm(form);
+          } else {
+            // Fallback: persist scroll position only
+            sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+          }
+        } catch (_) {}
         form.dataset.skipConfirm = 'true';
         confirmState.pendingForm = null;
         closeModal(confirmState.modal);
@@ -501,11 +536,21 @@
       });
     });
 
-    // ESC closes any open modal ---------------------------------------------
+    // ESC closes any open modal and any open dropdowns ----------------------
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         qsa('.modal[aria-hidden="false"]').forEach(closeModal);
+        qsa('details.dropdown[open]').forEach(d => d.removeAttribute('open'));
       }
+    });
+
+    // Close dropdowns when clicking outside ---------------------------------
+    document.addEventListener('click', function(e) {
+      qsa('details.dropdown[open]').forEach(function(drop) {
+        if (!drop.contains(e.target)) {
+          drop.removeAttribute('open');
+        }
+      });
     });
 
     // Restore scroll position and optionally re-open time block modal after full page reload
@@ -568,6 +613,60 @@
           btn.setAttribute('aria-expanded', collapsedNow ? 'false' : 'true');
           if (collapsedNow) collapsed.add(sid); else collapsed.delete(sid);
           saveSet(collapsed);
+        });
+      });
+
+      // Expand/Collapse all controls
+      const expandAllBtn = qs('.js-expand-all');
+      const collapseAllBtn = qs('.js-collapse-all');
+      if (expandAllBtn) {
+        expandAllBtn.addEventListener('click', function() {
+          qsa('article.station-card').forEach(card => {
+            card.classList.remove('is-collapsed');
+            const sid = card.getAttribute('data-station-id');
+            const btn = qs('.station-toggle[data-station-id="' + sid + '"]');
+            if (btn) { btn.setAttribute('aria-pressed', 'false'); btn.setAttribute('aria-expanded', 'true'); }
+            collapsed.delete(sid);
+          });
+          saveSet(collapsed);
+        });
+      }
+      if (collapseAllBtn) {
+        collapseAllBtn.addEventListener('click', function() {
+          qsa('article.station-card').forEach(card => {
+            card.classList.add('is-collapsed');
+            const sid = card.getAttribute('data-station-id');
+            const btn = qs('.station-toggle[data-station-id="' + sid + '"]');
+            if (btn) { btn.setAttribute('aria-pressed', 'true'); btn.setAttribute('aria-expanded', 'false'); }
+            collapsed.add(sid);
+          });
+          saveSet(collapsed);
+        });
+      }
+    })();
+
+    // Remember volunteer list (details) open/closed per time block -----------
+    (function() {
+      const STORAGE_KEY = 'admin:openReservations';
+      function readSet() {
+        try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? new Set(JSON.parse(raw)) : new Set(); }
+        catch (_) { return new Set(); }
+      }
+      function saveSet(set) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(set))); } catch (_) {}
+      }
+
+      const openSet = readSet();
+      qsa('details.admin-reservations[data-block-id]').forEach(function(d) {
+        const bid = String(d.getAttribute('data-block-id'));
+        if (openSet.has(bid)) {
+          try { d.setAttribute('open', ''); } catch (_) { d.open = true; }
+        } else {
+          try { d.removeAttribute('open'); } catch (_) { d.open = false; }
+        }
+        d.addEventListener('toggle', function() {
+          if (d.open) openSet.add(bid); else openSet.delete(bid);
+          saveSet(openSet);
         });
       });
     })();

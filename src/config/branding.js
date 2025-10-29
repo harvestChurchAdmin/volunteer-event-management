@@ -20,6 +20,10 @@ function getBranding() {
   const logoUrl = clean(process.env.BRAND_LOGO_URL) || null;
   const faviconUrl = clean(process.env.BRAND_FAVICON_URL) || null;
   const homePath = clean(process.env.BRAND_HOME_PATH) || '/';
+  // Optional color overrides for theming
+  const brandColor = clean(process.env.BRAND_COLOR) || '';
+  const brandStrongColor = clean(process.env.BRAND_COLOR_STRONG) || '';
+  const accentColor = clean(process.env.ACCENT_COLOR) || '';
 
   return {
     appName,
@@ -29,6 +33,9 @@ function getBranding() {
     logoUrl,
     faviconUrl,
     homePath,
+    brandColor,
+    brandStrongColor,
+    accentColor,
   };
 }
 

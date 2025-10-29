@@ -94,18 +94,37 @@ const slotPercent = slotTotals.capacity > 0
     <% } %>
   </div>
   <div class="page-header__actions">
-    <a class="btn btn-secondary" href="/admin/event/<%= event.event_id %>/export.csv">Quick Export</a>
-    <button class="btn btn-ghost" data-open="#exportCsvModal">Export options</button>
+    <details class="dropdown">
+      <summary class="btn btn-accent">Actions</summary>
+      <div class="dropdown__menu">
+        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
+          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
+          Quick Export
+        </a>
+        <button class="dropdown__link" data-open="#exportCsvModal" type="button">
+          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
+          Export options…
+        </button>
+        <button class="dropdown__link" data-open="#editEventModal" type="button">
+          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+          Edit event…
+        </button>
+        <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item"
+              data-confirm="Delete this event and all associated stations, time blocks, and volunteers? This cannot be undone."
+              data-confirm-cta="Delete">
+          <button type="submit" class="dropdown__link btn-danger">
+            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
+            Delete event
+          </button>
+        </form>
+      </div>
+    </details>
     <form action="/admin/event/<%= event.event_id %>/publish" method="POST">
       <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
       <input type="hidden" name="redirectTo" value="/admin/event/<%= event.event_id %>">
       <button class="btn <%= event.is_published ? 'btn-secondary' : 'btn-primary' %>">
         <%= event.is_published ? 'Unpublish' : 'Publish' %>
       </button>
-    </form>
-    <button class="btn btn-ghost" data-open="#editEventModal">Edit event</button>
-    <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm" data-confirm="Delete this event and all associated stations, time blocks, and volunteers? This cannot be undone." data-confirm-cta="Delete">
-      <button type="submit" class="btn btn-danger">Delete event</button>
     </form>
   </div>
 </section>
@@ -116,7 +135,13 @@ const slotPercent = slotTotals.capacity > 0
 <section class="page-section page-shell">
   <div class="section-header">
     <h2>Stations</h2>
-    <button id="newStationBtn" class="btn btn-primary" data-open="#newStationModal">Add station</button>
+    <div class="section-header__actions">
+      <button id="newStationBtn" class="btn btn-primary" data-open="#newStationModal">Add station</button>
+      <div class="split-actions">
+        <button type="button" class="btn btn-ghost btn-small js-expand-all">Expand all</button>
+        <button type="button" class="btn btn-ghost btn-small js-collapse-all">Collapse all</button>
+      </div>
+    </div>
   </div>
   <% if (stations.length > 0) { %>
     <div class="station-grid js-station-list" data-event-id="<%= event.event_id %>">
@@ -164,15 +189,26 @@ const slotPercent = slotTotals.capacity > 0
                       data-event-id="<%= event.event_id %>">
                 Add time block
               </button>
-              <button class="btn btn-ghost" data-open="#editStationModal-<%= station.station_id %>">Edit station</button>
-              <form class="inline-form js-confirm"
-                    data-confirm="Delete this station and all its time blocks? This cannot be undone."
-                    data-confirm-cta="Delete"
-                    action="/admin/station/<%= station.station_id %>/delete"
-                    method="POST">
-                <input type="hidden" name="eventId" value="<%= event.event_id %>">
-                <button type="submit" class="btn btn-danger">Delete</button>
-              </form>
+              <details class="dropdown">
+                <summary class="btn btn-outline">Manage</summary>
+                <div class="dropdown__menu">
+                  <button class="dropdown__link" data-open="#editStationModal-<%= station.station_id %>" type="button">
+                    <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+                    Edit station…
+                  </button>
+                  <form class="inline-form js-confirm dropdown__item"
+                        data-confirm="Delete this station and all its time blocks? This cannot be undone."
+                        data-confirm-cta="Delete"
+                        action="/admin/station/<%= station.station_id %>/delete"
+                        method="POST">
+                    <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                    <button type="submit" class="dropdown__link btn-danger">
+                      <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
+                      Delete station
+                    </button>
+                  </form>
+                </div>
+              </details>
             </div>
           </header>
 
@@ -229,27 +265,33 @@ const slotPercent = slotTotals.capacity > 0
                         </span>
                       </div>
                     </div>
-                    <details class="admin-reservations" <%= block.reservations && block.reservations.length ? '' : 'open' %>>
+                    <details class="admin-reservations" data-block-id="<%= block.block_id %>">
                       <summary>Volunteers (<%= (block.reservations && block.reservations.length) || 0 %>)</summary>
                       <% if (block.reservations && block.reservations.length > 0) { %>
                         <ul class="admin-reservation-list">
                           <% block.reservations.forEach(function(reservation) { %>
                             <li class="admin-reservation">
                               <div class="admin-reservation__info">
-                                <strong><%= reservation.name %></strong>
+                                <div class="admin-reservation__name">
+                                  <svg class="icon icon-person" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/>
+                                  </svg>
+                                  <strong><%= reservation.name %></strong>
+                                </div>
                                 <span><%= reservation.email %></span>
                                 <% if (reservation.phone) { %>
                                   <span><%= reservation.phone %></span>
                                 <% } %>
                               </div>
                               <div class="admin-reservation__actions">
-                                <button class="btn btn-ghost" data-open="#editReservationModal-<%= reservation.reservation_id %>">Edit</button>
+                                <button class="btn btn-outline" data-open="#editReservationModal-<%= reservation.reservation_id %>">Edit</button>
                                 <form class="inline-form js-confirm"
                                       data-confirm="Remove this volunteer from the time block?"
                                       data-confirm-cta="Remove"
                                       action="/admin/reservation/<%= reservation.reservation_id %>/delete"
                                       method="POST">
                                   <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                                  <input type="hidden" name="station_id" value="<%= station.station_id %>">
                                   <button type="submit" class="btn btn-danger">Remove</button>
                                 </form>
                               </div>
@@ -258,6 +300,7 @@ const slotPercent = slotTotals.capacity > 0
                             <%- include('../partials/modal-start', { id: 'editReservationModal-' + reservation.reservation_id, title: 'Edit Volunteer' }) %>
                               <form id="editReservationForm-<%= reservation.reservation_id %>" action="/admin/reservation/<%= reservation.reservation_id %>/edit" method="POST" novalidate>
                                 <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                                <input type="hidden" name="station_id" value="<%= station.station_id %>">
                                 <div class="form-grid">
                                   <div class="form-group">
                                     <label for="reservation-name-<%= reservation.reservation_id %>">Name</label>
@@ -303,13 +346,14 @@ const slotPercent = slotTotals.capacity > 0
                   </div>
                   <div class="admin-block__actions">
                     <button class="btn btn-primary" data-open="#addReservationModal-<%= block.block_id %>" <%= block.is_full ? 'disabled title="Time block is full"' : '' %>>Add volunteer</button>
-                    <button class="btn btn-ghost" data-open="#editBlockModal-<%= block.block_id %>">Edit block</button>
+                    <button class="btn btn-outline" data-open="#editBlockModal-<%= block.block_id %>">Edit block</button>
                     <form class="inline-form js-confirm"
                           data-confirm="Delete this time block? This cannot be undone."
                           data-confirm-cta="Delete"
                           action="/admin/block/<%= block.block_id %>/delete"
                           method="POST">
                       <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                      <input type="hidden" name="station_id" value="<%= station.station_id %>">
                       <button type="submit" class="btn btn-danger">Delete</button>
                     </form>
                   </div>
@@ -318,6 +362,7 @@ const slotPercent = slotTotals.capacity > 0
                 <%- include('../partials/modal-start', { id: 'addReservationModal-' + block.block_id, title: 'Add Volunteer to Time Block' }) %>
                   <form id="addReservationForm-<%= block.block_id %>" action="/admin/block/<%= block.block_id %>/reservations" method="POST" novalidate>
                     <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                    <input type="hidden" name="station_id" value="<%= station.station_id %>">
                     <div class="form-grid">
                       <div class="form-group">
                         <label for="add-reservation-name-<%= block.block_id %>">Name</label>
@@ -339,6 +384,7 @@ const slotPercent = slotTotals.capacity > 0
                 <%- include('../partials/modal-start', { id: 'editBlockModal-' + block.block_id, title: 'Edit Time Block' }) %>
                   <form id="editBlockForm-<%= block.block_id %>" action="/admin/block/<%= block.block_id %>/edit" method="POST" novalidate>
                     <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                    <input type="hidden" name="station_id" value="<%= station.station_id %>">
         <div class="form-grid two">
           <div class="form-group">
             <label for="block-start-visible-<%= block.block_id %>">Start time</label>

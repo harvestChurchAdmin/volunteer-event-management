@@ -659,14 +659,25 @@
       const openSet = readSet();
       qsa('details.admin-reservations[data-block-id]').forEach(function(d) {
         const bid = String(d.getAttribute('data-block-id'));
-        if (openSet.has(bid)) {
-          try { d.setAttribute('open', ''); } catch (_) { d.open = true; }
-        } else {
-          try { d.removeAttribute('open'); } catch (_) { d.open = false; }
-        }
+        const setOpen = (isOpen) => {
+          try { isOpen ? d.setAttribute('open', '') : d.removeAttribute('open'); } catch (_) { d.open = isOpen; }
+          const block = d.closest('.admin-block');
+          if (block) {
+            if (isOpen) block.classList.add('has-open-reservations');
+            else block.classList.remove('has-open-reservations');
+          }
+        };
+
+        setOpen(openSet.has(bid));
         d.addEventListener('toggle', function() {
           if (d.open) openSet.add(bid); else openSet.delete(bid);
           saveSet(openSet);
+          // Update block class for styling without relying on :has
+          const block = d.closest('.admin-block');
+          if (block) {
+            if (d.open) block.classList.add('has-open-reservations');
+            else block.classList.remove('has-open-reservations');
+          }
         });
       });
     })();

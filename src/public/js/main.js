@@ -59,6 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     const params = new URLSearchParams(location.search || '');
     const auto = params.get('auto');
+    // Debug helpers: enable spacing outlines with ?debug=spacing
+    const debugFlag = params.get('debug');
+    if (debugFlag && /^(1|true|on|yes|spacing)$/i.test(debugFlag)) {
+      try { document.body.classList.add('debug-spacing'); } catch (_) {}
+    }
     const printBtn = document.querySelector('[data-action="print"]');
     if (printBtn) {
       printBtn.addEventListener('click', (e) => {

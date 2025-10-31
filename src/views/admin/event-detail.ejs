@@ -94,7 +94,7 @@ const slotPercent = slotTotals.capacity > 0
     <% } %>
   </div>
   <div class="page-header__actions">
-    <details class="dropdown">
+    <details class="dropdown dropdown--float">
       <summary class="btn btn-accent">Actions</summary>
       <div class="dropdown__menu">
         <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/print?auto=1" target="_blank" rel="noopener">
@@ -193,7 +193,7 @@ const slotPercent = slotTotals.capacity > 0
                       data-event-id="<%= event.event_id %>">
                 Add time block
               </button>
-              <details class="dropdown">
+              <details class="dropdown dropdown--float">
                 <summary class="btn btn-outline">Manage</summary>
                 <div class="dropdown__menu">
                   <button class="dropdown__link" data-open="#editStationModal-<%= station.station_id %>" type="button">
@@ -254,7 +254,7 @@ const slotPercent = slotTotals.capacity > 0
                       <div class="admin-block__metric">
                         <span class="admin-block__metric-label">Capacity</span>
                         <span class="capacity-display"><strong><%= block.capacity_needed %></strong></span>
-                        <button type="button" class="btn btn-ghost btn-small edit-capacity-btn" data-block-id="<%= block.block_id %>">Edit</button>
+                        <button type="button" class="btn btn-outline btn-small edit-capacity-btn" data-block-id="<%= block.block_id %>">Edit</button>
                         <form class="inline-form capacity-edit-form" data-block-id="<%= block.block_id %>" action="/admin/block/<%= block.block_id %>/edit" method="POST" style="display:none;">
                           <input type="hidden" name="eventId" value="<%= event.event_id %>">
                           <input type="number" name="capacity_needed" min="1" value="<%= block.capacity_needed %>" aria-label="Capacity for block <%= block.block_id %>">

@@ -108,9 +108,16 @@ body.app-shell {
   flex-direction: column;
 }
 
+/* Prevent subtle horizontal scroll on public pages */
+.app-shell.is-public {
+  overflow-x: hidden;
+}
+
 .app-shell.is-admin {
   /* Match public background style to avoid gradient artifacts on long pages */
   background: var(--surface-page);
+  /* Prevent tiny horizontal overflow when header layouts wrap */
+  overflow-x: hidden;
 }
 
 .app-main {
@@ -929,7 +936,8 @@ details.dropdown[open] > summary { opacity: 0.9; }
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex: 1 1 260px;
+  /* Allow the heading to actually shrink within the flex header */
+  flex: 1 1 0%;
   min-width: 0;
 }
 
@@ -962,6 +970,25 @@ details.dropdown[open] > summary { opacity: 0.9; }
   gap: 0.5rem;
   justify-content: flex-end;
   align-items: center;
+  min-width: 0;
+}
+
+/* Admin station header: stack safely on small screens to avoid overlap/overflow */
+@media (max-width: 720px) {
+  .app-shell.is-admin .station-card__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .app-shell.is-admin .station-card__heading-top { flex-wrap: wrap; }
+  .app-shell.is-admin .station-card__heading-top h2 { white-space: normal; }
+  .app-shell.is-admin .station-card__header-actions {
+    justify-content: stretch;
+    gap: 0.5rem;
+  }
+  .app-shell.is-admin .station-card__header-actions .btn,
+  .app-shell.is-admin .station-card__header-actions details { width: 100%; }
+  .app-shell.is-admin .station-card__header-actions details > summary.btn { width: 100%; text-align: center; }
 }
 
 .event-card {
@@ -1224,8 +1251,12 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
 /* Inline capacity edit styles */
 .btn-small {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.85rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.1;
+  min-height: auto;
+  border-radius: 999px;
+  vertical-align: baseline;
 }
 .capacity-edit-form {
   display: inline-flex;
@@ -1297,6 +1328,50 @@ details.dropdown[open] > summary { opacity: 0.9; }
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+/* Responsive tables: stack rows on small screens to avoid horizontal scrolling */
+@media (max-width: 720px) {
+  .table-scroll { overflow-x: visible; }
+  .table-scroll table { min-width: 0; width: 100%; }
+  .table thead { display: none; }
+  .table tbody { display: block; }
+  .table tbody tr {
+    display: block;
+    margin: 0 0 12px 0;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: var(--surface-card);
+  }
+  .table tbody td {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border: 0;
+  }
+  /* Place all real content in the value column (col 2); the label comes from ::before in col 1 */
+  .table tbody td > * { grid-column: 2; }
+  .table tbody td + td { border-top: 1px solid rgba(15, 23, 42, 0.06); }
+  .table tbody td::before {
+    content: attr(data-th);
+    color: var(--text-soft);
+    font-weight: 600;
+  }
+  .row-actions { justify-content: flex-start; }
+
+  /* Make action buttons uniform and aligned in the value column */
+  .table tbody td[data-th="Actions"] .row-actions {
+    display: grid;
+    grid-template-columns: 1fr; /* stack buttons */
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+  .table tbody td[data-th="Actions"] .row-actions > * { width: 100%; }
+  .table tbody td[data-th="Actions"] .row-actions a.btn { text-align: center; }
+  .table tbody td[data-th="Actions"] .row-actions details { margin-left: 0 !important; }
+  .table tbody td[data-th="Actions"] .row-actions details > summary.btn { width: 100%; text-align: center; }
 }
 
 .inline-form {
@@ -1559,14 +1634,15 @@ details.dropdown[open] > summary { opacity: 0.9; }
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.75rem 1.1rem;
+  padding: 0.9rem 1.2rem;
   border-radius: 999px;
   border: none;
   font-weight: 600;
+  font-size: 1rem;
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.95), rgba(59, 130, 246, 0.9));
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28), 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .selection-fab__button:focus-visible {
@@ -1589,7 +1665,32 @@ details.dropdown[open] > summary { opacity: 0.9; }
   }
 }
 
+/* Subtle attention pulse (desktop-biased) */
+@keyframes selectionFabPulse {
+  0%, 100% {
+    box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28), 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+  50% {
+    box-shadow: 0 16px 32px rgba(37, 99, 235, 0.35), 0 0 0 5px rgba(37, 99, 235, 0.22);
+  }
+}
+
+@media (min-width: 641px) {
+  .selection-fab.is-visible .selection-fab__button {
+    animation: selectionFabPulse 2200ms ease-in-out infinite;
+  }
+}
+
 @media (max-width: 640px) {
+  /* Avoid overflow in the view selector */
+  .slot-toolbar__group {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    width: 100%;
+  }
+  .slot-toolbar__select { min-width: 0; width: 100%; }
+
   .selection-fab {
     left: clamp(1rem, 4vw, 2rem);
     right: clamp(1rem, 4vw, 2rem);
@@ -1678,9 +1779,12 @@ details.dropdown[open] > summary { opacity: 0.9; }
 .admin-block {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem 1.5rem;
-  justify-content: space-between;
-  align-items: center;
+  /* Use explicit row/column gaps so row spacing can be tuned when collapsed */
+  column-gap: 1.5rem;
+  row-gap: 1rem;
+  justify-content: flex-start; /* pack items; avoid large gap between rows */
+  align-items: flex-start; /* align actions to the top on desktop */
+  min-width: 0;
   padding: 1rem 1.25rem;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: var(--radius-md);
@@ -1693,6 +1797,7 @@ details.dropdown[open] > summary { opacity: 0.9; }
   flex-direction: column;
   gap: 0.65rem;
   flex: 1 1 320px;
+  min-width: 0;
 }
 
 .admin-block__times {
@@ -1724,14 +1829,14 @@ details.dropdown[open] > summary { opacity: 0.9; }
 .admin-block__stats {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: baseline; /* align labels, numbers, and controls */
+  gap: 0.9rem;
   color: var(--text-soft);
 }
 
 .admin-block__metric {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline; /* align numbers with labels */
   gap: 0.4rem;
   flex-wrap: wrap;
 }
@@ -1742,28 +1847,39 @@ details.dropdown[open] > summary { opacity: 0.9; }
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
+  line-height: 1; /* keep baseline consistent with adjacent numbers */
+  display: inline-block;
 }
 
 .admin-block__metric .capacity-display {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline; /* align number baseline with label */
   gap: 0.2rem;
+  line-height: 1;
 }
 
 .admin-block__metric .capacity-display strong {
   font-size: 1rem;
   color: var(--text-strong);
+  line-height: 1;
 }
 
 .admin-block__reserved {
   font-size: 0.95rem;
   color: var(--text-strong);
+  display: inline-flex;
+  align-items: baseline; /* keep numerator with label baseline */
+  line-height: 1;
 }
 
 .admin-block__reserved strong {
   font-weight: 700;
   color: var(--brand-strong);
+  line-height: 1;
 }
+
+/* Ensure tiny buttons in metrics align on the baseline */
+.admin-block__metric .btn-small { align-self: baseline; }
 
 .admin-block__actions {
   display: flex;
@@ -1771,28 +1887,64 @@ details.dropdown[open] > summary { opacity: 0.9; }
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  width: 100%;
+  /* Let actions sit on same row on wide screens; push to the right */
+  margin-left: auto;
+  max-width: 100%;
+  /* Default: tight spacing when volunteers list is collapsed */
+  border-top: 0;
+  margin-top: 0.25rem;
+  padding-top: 0;
+}
+
+/* When the volunteers list is open, add visual separation above actions */
+.admin-block.has-open-reservations .admin-block__actions,
+.admin-block__main:has(details.admin-reservations[open]) + .admin-block__actions {
   border-top: 1px solid var(--border-soft);
   margin-top: 0.75rem;
   padding-top: 0.75rem;
 }
 
+/* On wider screens, keep actions aligned to the top without extra spacing */
+@media (min-width: 721px) {
+  .admin-block.has-open-reservations .admin-block__actions,
+  .admin-block__main:has(details.admin-reservations[open]) + .admin-block__actions {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
+  }
+}
+
+/* When volunteers are collapsed, provide modest spacing to actions */
+.admin-block:not(.has-open-reservations) {
+  row-gap: 0.4rem;
+}
+
 .admin-reservations {
-  margin-top: 0.75rem;
+  /* Reset UA default margins that add unwanted whitespace when collapsed */
+  margin: 0;
+  padding: 0;
   width: 100%;
+  /* Create a new formatting context to avoid margin-collapsing quirks on Android */
+  display: flow-root;
 }
 
 .admin-reservations summary {
+  display: inline-flex;
+  align-items: center;
   font-weight: 600;
   cursor: pointer;
   color: var(--text-strong);
-  margin-bottom: 0.4rem;
+  /* Keep collapsed state compact; expanded gets extra space below */
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
   list-style: none;
 }
 
-.admin-reservations[open] summary {
-  margin-bottom: 0.65rem;
-}
+.admin-reservations[open] summary { margin-bottom: 0.5rem; }
+
+/* When volunteers are collapsed, remove any extra bottom margin from the summary */
+.admin-block:not(.has-open-reservations) .admin-reservations summary { margin-bottom: 0; }
 
 .admin-reservations summary::-webkit-details-marker {
   display: none;
@@ -1884,7 +2036,21 @@ details.dropdown[open] > summary { opacity: 0.9; }
   .admin-block__actions {
     width: 100%;
     justify-content: flex-start;
+    margin-left: 0; /* override desktop push-right on mobile */
   }
+
+  /* Reset main column flex-basis so it doesn't reserve 320px height */
+  .admin-block__main { flex: 1 1 auto; min-height: 0; }
+
+  /* Volunteers list: stack and wrap safely to prevent horizontal scroll */
+  .admin-reservation { grid-template-columns: 1fr; }
+  .admin-reservation__info { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+  .admin-reservation__actions { justify-self: stretch; width: 100%; }
+  .admin-reservation__actions .btn { width: 100%; text-align: center; }
+  .admin-reservation__actions form { width: 100%; }
+  .admin-reservation__actions form .btn { width: 100%; }
+
+  /* Spacing handled globally; no extra margin needed here */
 }
 
 form {
@@ -2116,6 +2282,17 @@ textarea {
     padding: 2.2rem 0 3.5rem;
   }
 }
+
+/* -------------------------------------------------------------
+   Debug: spacing outlines (enable with ?debug=spacing)
+------------------------------------------------------------- */
+.debug-spacing .admin-block { outline: 2px solid rgba(255, 0, 0, 0.6); }
+.debug-spacing .admin-block__main { outline: 2px dashed rgba(255, 165, 0, 0.8); }
+.debug-spacing .admin-block__times { outline: 1px dashed rgba(255, 200, 0, 0.9); }
+.debug-spacing .admin-block__stats { outline: 1px dashed rgba(0, 128, 0, 0.8); }
+.debug-spacing .admin-reservations { outline: 2px dotted rgba(128, 0, 128, 0.8); background: rgba(128, 0, 128, 0.06); }
+.debug-spacing .admin-reservations summary { outline: 2px solid rgba(255, 0, 255, 0.8); background: rgba(255, 0, 255, 0.06); }
+.debug-spacing .admin-block__actions { outline: 2px solid rgba(0, 128, 255, 0.8); background: rgba(0, 128, 255, 0.06); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

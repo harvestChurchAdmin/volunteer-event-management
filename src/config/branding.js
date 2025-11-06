@@ -11,12 +11,12 @@ function clean(value) {
 }
 
 function getBranding() {
-  const appName = clean(process.env.APP_NAME) || 'Volunteer Event Manager';
+  const appName = clean(process.env.APP_NAME) || 'Event Sign-up Manager';
   const orgName = clean(process.env.ORG_DISPLAY_NAME) || 'Your Organization';
   const copyrightHolder = clean(process.env.ORG_COPYRIGHT_HOLDER) || orgName;
   const tagline =
     clean(process.env.APP_TAGLINE) ||
-    'Coordinate volunteer opportunities with an accessible experience.';
+    'Coordinate sign-ups with an accessible experience.';
   const logoUrl = clean(process.env.BRAND_LOGO_URL) || null;
   const faviconUrl = clean(process.env.BRAND_FAVICON_URL) || null;
   const homePath = clean(process.env.BRAND_HOME_PATH) || '/';

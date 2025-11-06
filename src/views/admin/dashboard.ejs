@@ -45,6 +45,13 @@
                step="900"
                required>
       </div>
+      <div class="form-group full">
+        <label for="event-signup-mode">Sign-up type</label>
+        <select id="event-signup-mode" name="signup_mode" required>
+          <option value="schedule" selected>Volunteer schedule (stations &amp; time slots)</option>
+          <option value="potluck">Potluck (categories &amp; items, no times)</option>
+        </select>
+      </div>
     </div>
     <div class="card-actions">
       <button type="submit" class="btn btn-primary">Create event</button>
@@ -74,7 +81,18 @@
           <tbody>
             <% events.forEach(event => { %>
               <tr>
-                <td data-th="Name"><strong><%= event.name %></strong></td>
+                <td data-th="Name">
+                  <strong><%= event.name %></strong>
+                  <span class="type-badge <%= (String(event.signup_mode||'')==='potluck') ? 'type-badge--potluck' : 'type-badge--schedule' %>" style="margin-left:6px;">
+                    <% if (String(event.signup_mode||'')==='potluck') { %>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 2h2v9a1 1 0 0 1-2 0V2Zm4 0h2v9a1 1 0 0 1-2 0V2Zm9 0c1.657 0 3 1.343 3 3 0 1.302-.839 2.402-2 2.817V22h-2V7.817A3.001 3.001 0 0 1 17 2Z"/></svg>
+                      Potluck
+                    <% } else { %>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h10v2h3a1 1 0 0 1 1 1v3H3V5a1 1 0 0 1 1-1h3V2Zm14 7v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9h18Zm-5 3h-4v4h4v-4Z"/></svg>
+                      Schedule
+                    <% } %>
+                  </span>
+                </td>
                 <td data-th="Dates">
                   <%= new Date(event.date_start).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
                   &nbsp;–&nbsp;
@@ -90,6 +108,10 @@
                   <details class="dropdown dropdown--float" style="display:inline-block;margin-left:6px;">
                     <summary class="btn btn-accent">Actions</summary>
                     <div class="dropdown__menu">
+                      <a class="dropdown__link" href="/admin/event/<%= event.event_id %>?edit=1">
+                        <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+                        Edit event…
+                      </a>
                       <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
                         <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
                         <input type="hidden" name="redirectTo" value="/admin/dashboard">

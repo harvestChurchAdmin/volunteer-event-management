@@ -14,6 +14,7 @@ const canonicalLocal = helpers.canonicalLocal;
 
 <%
   const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
+  const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
   const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0);
 %>
 
@@ -23,7 +24,7 @@ const canonicalLocal = helpers.canonicalLocal;
     <% if (blocks.length > 0) { %>
       <div class="station-group card">
         <div class="station-card__title">
-          <h3>Station: <%= station.name %></h3>
+          <h3><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h3>
           <% const stationAbout = station.about || station.description || ''; %>
           <% const stationDuties = station.duties || ''; %>
           <% if (stationAbout || stationDuties) { %>
@@ -48,15 +49,19 @@ const canonicalLocal = helpers.canonicalLocal;
             <li
               class="time-block-item <%= block.is_full ? 'is-full' : '' %>"
               data-block-id="<%= block.block_id %>"
-              data-start-time="<%= block.start_time %>"
-              data-end-time="<%= block.end_time %>"
+              data-start-time="<%= isPotluck ? '' : block.start_time %>"
+              data-end-time="<%= isPotluck ? '' : block.end_time %>"
               data-is-full="<%= !!block.is_full %>"
             >
               <div>
-                <strong><%= fmt12(block.start_time) %></strong>
-                &nbsp;–&nbsp;
-                <%= fmt12(block.end_time) %>
-                <span> • Capacity Needed: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
+                <% if (isPotluck) { %>
+                  <strong><%= block.title || 'Item' %></strong>
+                <% } else { %>
+                  <strong><%= fmt12(block.start_time) %></strong>
+                  &nbsp;–&nbsp;
+                  <%= fmt12(block.end_time) %>
+                <% } %>
+                <span> • <%= isPotluck ? 'Serving Size' : 'Capacity Needed' %>: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
               </div>
               <div>
                 <% if (block.is_full) { %>
@@ -85,6 +90,6 @@ const canonicalLocal = helpers.canonicalLocal;
   </div>
 <% } else { %>
   <div class="card">
-    <p>There are no volunteer opportunities available for this event yet. Please check back later!</p>
+    <p>There are no sign-ups available for this event yet. Please check back later!</p>
   </div>
 <% } %>

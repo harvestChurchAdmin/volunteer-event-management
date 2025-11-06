@@ -70,7 +70,8 @@ function getEventDetailsForAdmin(eventId) {
       name: r.volunteer_name,
       email: r.volunteer_email,
       phone: r.volunteer_phone,
-      reservation_date: r.reservation_date
+      reservation_date: r.reservation_date,
+      reservation_note: r.reservation_note || ''
     });
   });
 
@@ -81,6 +82,7 @@ function getEventDetailsForAdmin(eventId) {
     date_start: rows[0].date_start, // already local text
     date_end: rows[0].date_end,     // already local text
     is_published: !!rows[0].is_published,
+    signup_mode: rows[0].signup_mode || 'schedule',
     stations: []
   };
 
@@ -104,6 +106,9 @@ function getEventDetailsForAdmin(eventId) {
         block_id: row.block_id,
         start_time: row.start_time, // local text
         end_time: row.end_time,     // local text
+        title: row.title || '',
+        servings_min: row.servings_min,
+        servings_max: row.servings_max,
         capacity_needed:
           typeof row.capacity_needed !== 'undefined'
             ? row.capacity_needed
@@ -150,6 +155,12 @@ function getEventRosterForExport(eventId, opts = {}) {
           block_id: block.block_id,
           block_start: block.start_time,
           block_end: block.end_time,
+          servings_min: typeof block.servings_min !== 'undefined' ? block.servings_min : '',
+          servings_max: typeof block.servings_max !== 'undefined' ? block.servings_max : '',
+          servings: (typeof block.servings_min !== 'undefined' && block.servings_min != null)
+            ? String(block.servings_min) + ((typeof block.servings_max !== 'undefined' && block.servings_max != null) ? `-${block.servings_max}` : '')
+            : '',
+          block_title: block.title || '',
           capacity_needed: block.capacity_needed,
           reserved_count: Array.isArray(block.reservations) ? block.reservations.length : (block.reserved_count || 0),
           is_full: !!block.is_full,
@@ -160,6 +171,7 @@ function getEventRosterForExport(eventId, opts = {}) {
           volunteer_name: res.name,
           volunteer_email: res.email,
           volunteer_phone: res.phone || ''
+          , reservation_note: res.reservation_note || res.note || ''
         });
       });
     });
@@ -200,7 +212,13 @@ function getEventRosterForExport(eventId, opts = {}) {
     return cmpText(a.volunteer_name, b.volunteer_name);
   });
 
-  return { event, rows: sorted };
+  // Add denormalized helpers for CSV: event_type alias
+  const rowsOut = sorted.map(r => ({
+    ...r,
+    event_type: String(event.signup_mode || 'schedule')
+  }));
+
+  return { event, rows: rowsOut };
 }
 
 /**
@@ -226,6 +244,9 @@ function getStationDetailsForAdmin(stationId) {
         block_id: r.block_id,
         start_time: r.start_time,
         end_time: r.end_time,
+        title: r.title || '',
+        servings_min: r.servings_min,
+        servings_max: r.servings_max,
         capacity_needed:
           typeof r.capacity_needed !== 'undefined'
             ? r.capacity_needed
@@ -246,6 +267,9 @@ function getStationDetailsForAdmin(stationId) {
 function createEvent(arg) {
   const data = typeof arg === 'object' && arg !== null ? arg : {};
   const { name, description, date_start, date_end } = data;
+  const signup_mode = (data.signup_mode || data.mode || 'schedule').toString().trim().toLowerCase() === 'potluck'
+    ? 'potluck'
+    : 'schedule';
 
   if (!name || !date_start || !date_end) {
     throw createError(400, 'Event name, start, and end are required.');
@@ -254,7 +278,7 @@ function createEvent(arg) {
   const endTxt = toCanonicalLocalString(date_end);
   if (cmpLocal(startTxt, endTxt) >= 0) throw createError(400, 'Event end must be after start.');
 
-  return dal.admin.createEvent(name, description || '', startTxt, endTxt);
+  return dal.admin.createEvent(name, description || '', startTxt, endTxt, signup_mode);
 }
 
 /**
@@ -268,6 +292,10 @@ function updateEvent(eventId, data) {
   if (data.description !== undefined) patch.description = String(data.description || '');
   if (data.date_start) patch.date_start = toCanonicalLocalString(data.date_start);
   if (data.date_end) patch.date_end = toCanonicalLocalString(data.date_end);
+  if (data.signup_mode !== undefined || data.mode !== undefined) {
+    const mode = String(data.signup_mode || data.mode || '').trim().toLowerCase();
+    if (mode === 'potluck' || mode === 'schedule') patch.signup_mode = mode;
+  }
   if (patch.date_start && patch.date_end && cmpLocal(patch.date_start, patch.date_end) >= 0) {
     throw createError(400, 'Event end must be after start.');
   }
@@ -381,9 +409,34 @@ function updateStation(stationId, data) {
  * capacity is a positive integer.
  */
 function createTimeBlock(data) {
-  const { station_id, start_time, end_time, capacity_needed } = data || {};
-  if (!station_id || !start_time || !end_time || typeof capacity_needed === 'undefined') {
-    throw createError(400, 'All time block fields are required.');
+  const { station_id } = data || {};
+  let { start_time, end_time, capacity_needed, title, servings_min, servings_max } = data || {};
+  if (!station_id) {
+    throw createError(400, 'Station ID is required.');
+  }
+
+  // Look up the event to detect mode
+  const rows = dal.admin.getStationWithBlocks(station_id);
+  if (!rows || !rows.length) throw createError(404, 'Station not found.');
+  const eventId = rows[0].event_id;
+  const event = dal.public.getEventBasic(eventId);
+  const mode = event && event.signup_mode ? String(event.signup_mode) : 'schedule';
+
+  // In potluck mode, title is required; times can default to event start/end
+  if (mode === 'potluck') {
+    title = (title || '').toString().trim();
+    if (!title) throw createError(400, 'Item name is required.');
+    if (!start_time) start_time = event.date_start;
+    if (!end_time) end_time = event.date_end;
+    const minN = Number(servings_min);
+    const maxN = Number(servings_max);
+    if (Number.isFinite(minN) && Number.isFinite(maxN) && maxN < minN) {
+      throw createError(400, 'Feeds max must be greater than or equal to min.');
+    }
+  }
+
+  if (!start_time || !end_time || typeof capacity_needed === 'undefined') {
+    throw createError(400, 'Start, end, and capacity are required.');
   }
   const startTxt = toCanonicalLocalString(start_time);
   const endTxt = toCanonicalLocalString(end_time);
@@ -391,7 +444,16 @@ function createTimeBlock(data) {
   const cap = Number(capacity_needed);
   if (!Number.isFinite(cap) || cap < 1) throw createError(400, 'Capacity must be a positive number.');
 
-  return dal.admin.createTimeBlock(station_id, startTxt, endTxt, cap);
+  const res = dal.admin.createTimeBlock(station_id, startTxt, endTxt, cap);
+  if (title) {
+    const patch = { title: String(title) };
+    const minN = Number(servings_min);
+    const maxN = Number(servings_max);
+    if (Number.isFinite(minN)) patch.servings_min = minN;
+    if (Number.isFinite(maxN)) patch.servings_max = maxN;
+    dal.admin.updateTimeBlock(res.lastInsertRowid, patch);
+  }
+  return res;
 }
 
 /**
@@ -407,6 +469,24 @@ function updateTimeBlock(blockId, data) {
     const cap = Number(data.capacity_needed);
     if (!Number.isFinite(cap) || cap < 1) throw createError(400, 'Capacity must be a positive number.');
     patch.capacity_needed = cap;
+  }
+  if (data.servings_min !== undefined) {
+    const minN = Number(data.servings_min);
+    if (Number.isFinite(minN) && minN >= 0) patch.servings_min = minN;
+  }
+  if (data.servings_max !== undefined) {
+    const maxN = Number(data.servings_max);
+    if (Number.isFinite(maxN) && maxN >= 0) patch.servings_max = maxN;
+  }
+  if (data.title !== undefined) {
+    patch.title = (data.title || '').toString().trim();
+  }
+  if (data.servings_min !== undefined || data.servings_max !== undefined) {
+    const minN = Number(data.servings_min);
+    const maxN = Number(data.servings_max);
+    if (Number.isFinite(minN) && Number.isFinite(maxN) && maxN < minN) {
+      throw createError(400, 'Feeds max must be greater than or equal to min.');
+    }
   }
   if (patch.start_time && patch.end_time && cmpLocal(patch.start_time, patch.end_time) >= 0) {
     throw createError(400, 'End time must be after start time.');

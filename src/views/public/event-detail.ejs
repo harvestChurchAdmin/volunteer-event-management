@@ -1,12 +1,18 @@
 <%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
 
 <% const { fmt12 } = helpers; %>
+<% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
 
 <section class="page-header page-shell">
   <div>
-    <a href="/events" class="btn-link">&larr; Back to opportunities</a>
+    <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
     <h1><%= event.name %></h1>
-    <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
+    <% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
+    <% if (_same) { %>
+      <p class="page-subtitle"><%= _s.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) %> — <%= _s.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %> to <%= _e.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %></p>
+    <% } else { %>
+      <p class="page-subtitle"><%= fmt12(event.date_start) %> — <%= fmt12(event.date_end) %></p>
+    <% } %>
   </div>
 </section>
 
@@ -15,12 +21,30 @@
     <% if (event.description) { %>
       <p><%= event.description %></p>
     <% } else { %>
-      <p class="muted">Details for this event are coming soon. Select a station and time block that fits your schedule.</p>
+      <p class="muted"><%= isPotluck ? 'Select a category and item to bring.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
     <% } %>
   </article>
 </section>
 
-<%- include('../partials/messages', { messages }) %>
+<%- include('../partials/messages') %>
+
+<section class="page-section page-shell" aria-label="Manage link reminder">
+  <details class="disclosure">
+    <summary class="disclosure__summary">
+      <svg class="disclosure__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm-1-8.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></svg>
+      Already signed up? Email me my manage link
+    </summary>
+    <div class="disclosure__panel">
+      <form action="/manage/remind" method="POST" class="disclosure__form" novalidate>
+        <input type="hidden" name="eventId" value="<%= event.event_id %>">
+        <label class="sr-only" for="remind-email">Email</label>
+        <input id="remind-email" class="input-inline" type="email" name="email" placeholder="Enter the email you used to sign up" required>
+        <button type="submit" class="btn btn-outline">Send link</button>
+      </form>
+      <p class="disclosure__help">For returning participants who already registered. We’ll email a secure link to manage your selections.</p>
+    </div>
+  </details>
+</section>
 
 <%
   const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
@@ -29,21 +53,24 @@
 
 <% if (hasTimeBlocks) { %>
   <section class="page-section page-shell">
-    <div class="slot-toolbar">
-      <div class="slot-toolbar__group">
-        <label class="slot-toolbar__label" for="slot-view-mode">View opportunities by</label>
-        <select id="slot-view-mode" class="slot-toolbar__select">
-          <option value="station" selected>Station</option>
-          <option value="time">Date &amp; time</option>
-        </select>
+    <% if (!isPotluck) { %>
+      <div class="slot-toolbar">
+        <div class="slot-toolbar__group">
+          <label class="slot-toolbar__label" for="slot-view-mode">View selections by</label>
+          <select id="slot-view-mode" class="slot-toolbar__select">
+            <option value="station" selected>Station</option>
+            <option value="time">Date &amp; time</option>
+          </select>
+        </div>
       </div>
-    </div>
 
-    <div id="slots-by-time" class="slot-view slot-view--time" hidden>
-      <ul id="slots-by-time-list" class="time-block-list"></ul>
-    </div>
+      <div id="slots-by-time" class="slot-view slot-view--time" hidden>
+        <ul id="slots-by-time-list" class="time-block-list"></ul>
+      </div>
+    <% } %>
 
     <div id="slots-by-station" class="slot-view slot-view--station">
+      <h3 class="step-heading"><%= isPotluck ? 'Step 1: Select items' : 'Step 1: Select opportunities' %></h3>
       <div class="station-grid">
         <% stations.forEach(station => { %>
           <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
@@ -51,7 +78,7 @@
             <article class="card station-card">
               <div class="card-header">
               <div class="station-card__title">
-                <h2>Station: <%= station.name %></h2>
+                <h2><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h2>
                 <% const stationAbout = station.about || station.description || ''; %>
                 <% const stationDuties = station.duties || ''; %>
                 <% if (stationAbout || stationDuties) { %>
@@ -74,32 +101,60 @@
               </div>
               <ul class="time-block-list">
                 <% blocks.forEach(block => { %>
-                  <li
-                    class="time-block-item <%= block.is_full ? 'is-full' : '' %>"
-                    data-block-id="<%= block.block_id %>"
-                    data-station-id="<%= station.station_id %>"
-                    data-station-name="<%= station.name %>"
-                    data-start-time="<%= block.start_time %>"
-                    data-end-time="<%= block.end_time %>"
-                    data-is-full="<%= !!block.is_full %>"
-                    role="button"
-                    aria-pressed="false"
-                    tabindex="<%= block.is_full ? -1 : 0 %>"
-                  >
+                <li
+                  class="time-block-item <%= block.is_full ? 'is-full' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
+                  data-block-id="<%= block.block_id %>"
+                  data-station-id="<%= station.station_id %>"
+                  data-station-name="<%= station.name %>"
+                  data-start-time="<%= isPotluck ? '' : block.start_time %>"
+                  data-end-time="<%= isPotluck ? '' : block.end_time %>"
+                  <% if (isPotluck) { %>data-item-title="<%= (block.title || '').replace(/\"/g, '&quot;') %>"<% } %>
+                  data-is-full="<%= !!block.is_full %>"
+                  role="button"
+                  aria-pressed="false"
+                  tabindex="<%= block.is_full ? -1 : 0 %>"
+                >
                     <div class="time-block-item__info">
-                      <span class="station-chip muted" data-role="station-chip">Station: <%= station.name %></span>
-                      <strong><%= fmt12(block.start_time) %></strong>
-                      <span>&nbsp;–&nbsp;</span>
-                      <strong><%= fmt12(block.end_time) %></strong>
-                      <span class="muted"> • Capacity needed: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
-                      <span class="muted"> • Signed up: <%= block.reserved_count || 0 %></span>
+                      <span class="station-chip muted" data-role="station-chip"><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></span>
+                      <% if (isPotluck) { %>
+                        <strong><%= block.title || 'Item' %></strong>
+                      <% } else { %>
+                        <strong><%= helpers.fmtRange(block.start_time, block.end_time) %></strong>
+                      <% } %>
+                      <% if (isPotluck) { %>
+                        <span class="muted">
+                          • Feeds: <%= (typeof block.servings_min !== 'undefined' && block.servings_min != null) ? block.servings_min : '' %><%= (typeof block.servings_max !== 'undefined' && block.servings_max != null) ? ('–' + block.servings_max) : '' %>
+                        </span>
+                      <% } else { %>
+                        <span class="muted"> • Slots: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
+                      <% } %>
+                      <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
+                      <% /* Potluck "Others bringing" is rendered in the dedicated right column below. */ %>
                       <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
                     </div>
-                    <div>
+                    <% if (isPotluck) { %>
+                      <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
+                      <div class="time-block-item__others">
+                        <% if (_shown.length) { %>
+                          <div class="dish-notes-inline" title="Dishes others have signed up to bring (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others bringing</strong></div>
+                          <ul class="dish-notes-list" title="Dishes others have signed up to bring (duplicates welcome)">
+                            <% _shown.forEach(function(n){ %>
+                              <% if (typeof n === 'object') { %>
+                                <li><%= n.text %><% if (n.by) { %> (<%= n.by %>)<% } %></li>
+                              <% } else { %>
+                                <li><%= n %></li>
+                              <% } %>
+                            <% }) %>
+                            <% if (_more > 0) { %><li>+<%= _more %> more</li><% } %>
+                          </ul>
+                        <% } %>
+                      </div>
+                    <% } %>
+                    <div class="time-block-item__action">
                       <% if (block.is_full) { %>
                         <span class="badge">Full</span>
                       <% } else { %>
-                        <button type="button" class="btn btn-ghost select-slot-btn">Select</button>
+                        <button type="button" class="btn btn-ghost select-slot-btn"><%= isPotluck ? 'Sign up' : 'Select' %></button>
                       <% } %>
                     </div>
                   </li>
@@ -113,11 +168,22 @@
   </section>
 
   <section class="page-section page-shell">
+    <% if (isPotluck) { %>
+      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 2: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+      <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:none;">
+        <div id="selected-slots-container"></div>
+      </div>
+      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 3: Enter contact info</h3>
+    <% } else { %>
+      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 2: Review selections <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+      <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:none;">
+        <div id="selected-slots-container"></div>
+      </div>
+      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 3: Enter contact info</h3>
+    <% } %>
     <div id="signup-form" class="card card--plain signup-panel" style="display:none;">
-      <div id="selected-slots-container"></div>
-      <h2>You're almost done</h2>
-      <p class="muted">Share your contact info so the team can confirm your spot.</p>
-      <form id="signupFormTag" action="/signup" method="POST" novalidate>
+      <p class="muted">Share your contact info so the team can confirm your selection.</p>
+      <form id="signupFormTag" action="/signup" method="POST" novalidate data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
         <input type="hidden" name="eventId" value="<%= event.event_id %>">
         <div class="form-grid two">
           <div class="form-group">
@@ -134,7 +200,7 @@
           </div>
         </div>
         <div class="card-actions">
-          <button type="submit" class="btn btn-primary">Confirm selected opportunities</button>
+          <button type="submit" class="btn btn-primary">Confirm selections</button>
         </div>
       </form>
     </div>
@@ -142,10 +208,10 @@
 <% } else { %>
   <section class="page-section page-shell">
     <article class="card card--plain empty-state">
-      <h2>No volunteer opportunities yet</h2>
-      <p class="muted">There are no volunteer opportunities available for this event yet. Please check back soon or reach out to the coordinator.</p>
+      <h2>No sign-ups available yet</h2>
+      <p class="muted">There are no sign-ups available for this event yet. Please check back soon or reach out to the coordinator.</p>
       <div class="action-row">
-        <a class="btn btn-ghost" href="/events">Back to opportunities</a>
+        <a class="btn btn-ghost" href="/events">Back to sign-ups</a>
       </div>
     </article>
   </section>
@@ -154,5 +220,5 @@
 <%- include('../partials/footer') %>
 
 <div id="selection-fab" class="selection-fab" hidden>
-  <button type="button" class="selection-fab__button">Review selections</button>
-</div>
+  <button type="button" class="selection-fab__button">Continue to sign-up</button>
+ </div>

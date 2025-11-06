@@ -2,10 +2,10 @@
     <footer class="site-footer">
       <div class="site-footer__inner">
         <div>
-          <p class="site-footer__title"><%= (locals.brand && locals.brand.appName) || 'Volunteer Event Manager' %></p>
+          <p class="site-footer__title"><%= (locals.brand && locals.brand.appName) || 'Event Sign-up Manager' %></p>
         </div>
         <div class="site-footer__links">
-          <a href="/events">Find Opportunities</a>
+          <a href="/events">Find Sign-ups</a>
           <% if (user) { %>
             <a href="/admin/dashboard">Admin Dashboard</a>
             <a href="/logout">Logout</a>
@@ -19,6 +19,9 @@
       </div>
     </footer>
     <script src="/js/main.js" defer></script>
-    <script src="/js/admin-event-detail.js" defer></script>
+    <% const layout = locals.layoutVariant || 'public'; %>
+    <% if (layout === 'admin') { %>
+      <script src="/js/admin-event-detail.js" defer></script>
+    <% } %>
 </body>
 </html>

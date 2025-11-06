@@ -3,11 +3,12 @@
 <section class="page-header page-shell">
   <div>
     <a href="/events" class="btn-link">&larr; Back to events</a>
-    <h1>Manage your signup for <%= event.name %></h1>
-    <p class="page-subtitle">Update or cancel your reserved opportunities below and click “Save changes” when you are done.</p>
+    <h1>Manage your sign-up for <%= event.name %></h1>
+    <p class="page-subtitle">Update or cancel your selections below and click “Save changes” when you are done.</p>
   </div>
 </section>
 
+<% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
 <section class="page-section page-shell">
   <% if (messages.error && messages.error.length) { %>
     <div class="notice-wrapper">
@@ -37,21 +38,23 @@
 </section>
 
 <section class="page-section page-shell">
-  <div class="slot-toolbar">
-    <div class="slot-toolbar__group">
-      <label class="slot-toolbar__label" for="slot-view-mode">View opportunities by</label>
-      <select id="slot-view-mode" class="slot-toolbar__select">
-        <option value="station" selected>Station</option>
-        <option value="time">Date &amp; time</option>
-      </select>
+  <% if (!isPotluck) { %>
+    <div class="slot-toolbar">
+      <div class="slot-toolbar__group">
+        <label class="slot-toolbar__label" for="slot-view-mode">View selections by</label>
+        <select id="slot-view-mode" class="slot-toolbar__select">
+          <option value="station" selected>Station</option>
+          <option value="time">Date &amp; time</option>
+        </select>
+      </div>
     </div>
-  </div>
-
-  <div id="slots-by-time" class="slot-view slot-view--time" hidden>
-    <ul id="slots-by-time-list" class="time-block-list"></ul>
-  </div>
+    <div id="slots-by-time" class="slot-view slot-view--time" hidden>
+      <ul id="slots-by-time-list" class="time-block-list"></ul>
+    </div>
+  <% } %>
 
   <div id="slots-by-station" class="slot-view slot-view--station">
+    <h3 class="step-heading"><%= isPotluck ? 'Step 1: Review items' : 'Step 1: Review opportunities' %></h3>
     <div class="station-grid">
       <% event.stations.forEach(station => { %>
         <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
@@ -59,7 +62,7 @@
           <article class="card station-card">
             <div class="card-header">
             <div class="station-card__title">
-              <h2>Station: <%= station.name %></h2>
+              <h2><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h2>
               <% const stationAbout = station.about || station.description || ''; %>
               <% const stationDuties = station.duties || ''; %>
               <% if (stationAbout || stationDuties) { %>
@@ -83,32 +86,61 @@
             <ul class="time-block-list">
               <% blocks.forEach(block => { %>
                 <% const isSelected = Array.isArray(selectedBlockIds) && selectedBlockIds.includes(block.block_id); %>
+                <% var existingNote = ''; if (Array.isArray(reservations)) { for (var i=0;i<reservations.length;i++){ if (reservations[i].block_id === block.block_id) { existingNote = reservations[i].note || ''; break; } } } %>
                 <li
-                  class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %>"
+                  class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
                   data-block-id="<%= block.block_id %>"
                   data-station-id="<%= station.station_id %>"
                   data-station-name="<%= station.name %>"
-                  data-start-time="<%= block.start_time %>"
-                  data-end-time="<%= block.end_time %>"
+                  data-start-time="<%= isPotluck ? '' : block.start_time %>"
+                  data-end-time="<%= isPotluck ? '' : block.end_time %>"
+                  <% if (isPotluck) { %>data-item-title="<%= (block.title || '').replace(/\"/g, '&quot;') %>"<% } %>
+                  <% if (isPotluck) { %>data-dish-note="<%= (existingNote || '').replace(/\"/g, '&quot;') %>"<% } %>
                   data-is-full="<%= !!block.is_full && !isSelected %>"
                   role="button"
                   aria-pressed="<%= isSelected ? 'true' : 'false' %>"
                   tabindex="<%= block.is_full && !isSelected ? -1 : 0 %>"
                 >
                   <div class="time-block-item__info">
-                    <span class="station-chip muted" data-role="station-chip">Station: <%= station.name %></span>
-                    <strong><%= helpers.fmt12(block.start_time) %></strong>
-                    <span>&nbsp;–&nbsp;</span>
-                    <strong><%= helpers.fmt12(block.end_time) %></strong>
-                    <span class="muted"> • Capacity needed: <%= block.capacity_needed %></span>
-                    <span class="muted"> • Signed up: <%= block.reserved_count || 0 %></span>
-                    <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
+                    <span class="station-chip muted" data-role="station-chip"><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></span>
+                    <% if (isPotluck) { %>
+                      <strong><%= block.title || 'Item' %></strong>
+                    <% } else { %>
+                      <strong><%= helpers.fmtRange(block.start_time, block.end_time) %></strong>
+                    <% } %>
+                    <% if (isPotluck) { %>
+                      <span class="muted">
+                        • Feeds: <%= (typeof block.servings_min !== 'undefined' && block.servings_min != null) ? block.servings_min : '' %><%= (typeof block.servings_max !== 'undefined' && block.servings_max != null) ? ('–' + block.servings_max) : '' %>
+                      </span>
+                    <% } else { %>
+                      <span class="muted"> • Slots: <%= block.capacity_needed %></span>
+                    <% } %>
+                    <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
                   </div>
-                  <div>
+                  <% if (isPotluck) { %>
+                    <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
+                    <div class="time-block-item__others">
+                      <% if (_shown.length) { %>
+                        <div class="dish-notes-inline" title="Dishes others have signed up to bring (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others bringing</strong></div>
+                        <ul class="dish-notes-list" title="Dishes others have signed up to bring (duplicates welcome)">
+                          <% _shown.forEach(function(n){ %>
+                            <% if (typeof n === 'object') { %>
+                              <li><%= n.text %><% if (n.by) { %> (<%= n.by %>)<% } %></li>
+                            <% } else { %>
+                              <li><%= n %></li>
+                            <% } %>
+                          <% }) %>
+                          <% if (_more > 0) { %><li>+<%= _more %> more</li><% } %>
+                        </ul>
+                      <% } %>
+                    </div>
+                  <% } %>
+                  <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
+                  <div class="time-block-item__action">
                     <% if (block.is_full && !isSelected) { %>
                       <span class="badge">Full</span>
                     <% } else { %>
-                      <button type="button" class="btn btn-ghost select-slot-btn"><%= isSelected ? 'Selected' : 'Select' %></button>
+                      <button type="button" class="btn btn-ghost select-slot-btn"><%= isSelected ? 'Selected' : (isPotluck ? 'Sign up' : 'Select') %></button>
                     <% } %>
                   </div>
                 </li>
@@ -122,11 +154,18 @@
 </section>
 
 <section class="page-section page-shell">
+  <% if (isPotluck) { %>
+    <h3 id="step2Heading" class="step-heading">Step 2: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+    <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:block;">
+      <div id="selected-slots-container"></div>
+    </div>
+    <h3 id="step3Heading" class="step-heading">Step 3: Save your changes</h3>
+  <% } else { %>
+    <h3 id="step2Heading" class="step-heading">Step 2: Save your changes <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+  <% } %>
   <div id="signup-form" class="card card--plain signup-panel" style="display:block;">
-    <div id="selected-slots-container"></div>
-    <h2>Save your changes</h2>
-    <p class="muted">Select or deselect any opportunities above, then save. You can also remove all selections to cancel your signup.</p>
-    <form id="signupFormTag" action="/manage/<%= token %>" method="POST" novalidate data-mode="manage">
+    <p class="muted">Select or deselect any selections above, then save. You can also remove all selections to cancel your signup.</p>
+    <form id="signupFormTag" action="/manage/<%= token %>" method="POST" novalidate data-mode="manage" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
       <div class="card-actions">
         <button type="submit" class="btn btn-primary">Save changes</button>
       </div>
@@ -134,8 +173,12 @@
   </div>
 </section>
 
-<%- include('../partials/footer') %>
-
 <div id="selection-fab" class="selection-fab" hidden>
   <button type="button" class="selection-fab__button">Go to save changes</button>
 </div>
+
+<!-- Toast root + data hook for client-side snackbar (must be inside <body>) -->
+<div id="toast-root" aria-live="polite" aria-atomic="true" style="position:fixed; inset: auto 0 max(16px, env(safe-area-inset-bottom)) 0; display:flex; justify-content:center; pointer-events:none; z-index:2000;"></div>
+<div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>"></div>
+
+<%- include('../partials/footer') %>

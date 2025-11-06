@@ -14,9 +14,14 @@
   .print-actions { display: flex; gap: 0.5rem; }
   .roster-section { margin-bottom: 1.5rem; }
   .roster-station { margin-bottom: 1rem; }
-  .time-block { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin: 0.5rem 0; background: var(--surface); }
-  .time-block__header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 0.35rem; }
-  .time-block__meta { color: var(--text-soft); font-size: 0.95rem; }
+  .time-block { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; margin: 0.25rem 0; background: var(--surface); }
+  .time-block__header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin-bottom: 0.2rem; }
+  .time-block__meta { color: var(--text-soft); font-size: 0.85rem; }
+  .roster-station { margin-bottom: 0.5rem; }
+  .roster-station .card-header { padding: 0.25rem 0; }
+  .roster-station h2 { margin: 0; font-size: 1rem; }
+  .vol-list { margin: 0.2rem 0 0.1rem 1.2rem; }
+  .vol-list li { margin: 0.1rem 0; }
   .vol-list { margin: 0.25rem 0 0; padding-left: 1.1rem; }
   .vol-list li { margin: 0.15rem 0; }
   .vol-contact { color: var(--text-soft); }
@@ -46,19 +51,23 @@
       <% if (blocks.length) { %>
         <article class="card card--plain roster-station">
           <header class="card-header">
-            <h2>Station: <%= station.name %></h2>
+            <h2><%= (String(event.signup_mode||'')==='potluck') ? 'Category' : 'Station' %>: <%= station.name %></h2>
           </header>
           <div class="card-body">
             <% blocks.forEach(function(block) { %>
               <div class="time-block">
                 <div class="time-block__header">
                   <div>
-                    <strong><%= fmt12(block.start_time) %></strong>
-                    <span> – </span>
-                    <strong><%= fmt12(block.end_time) %></strong>
+                    <% if (block.title) { %>
+                      <strong>Item: <%= block.title %></strong>
+                    <% } else { %>
+                      <strong><%= fmt12(block.start_time) %></strong>
+                      <span> – </span>
+                      <strong><%= fmt12(block.end_time) %></strong>
+                    <% } %>
                   </div>
                   <div class="time-block__meta">
-                    Capacity: <%= block.capacity_needed %> • Signed up: <%= Array.isArray(block.reservations) ? block.reservations.length : (block.reserved_count || 0) %>
+                    Slots: <%= block.capacity_needed %> • Signed up: <%= Array.isArray(block.reservations) ? block.reservations.length : (block.reserved_count || 0) %>
                   </div>
                 </div>
                 <% if (block.reservations && block.reservations.length > 0) { %>
@@ -67,6 +76,7 @@
                       <li>
                         <strong><%= r.name %></strong>
                         <span class="vol-contact"> — <%= r.email %><% if (r.phone) { %> • <%= r.phone %><% } %></span>
+                        <% if (r.reservation_note) { %> <span class="vol-contact"> • Dish: <%= r.reservation_note %></span><% } %>
                       </li>
                     <% }) %>
                   </ol>

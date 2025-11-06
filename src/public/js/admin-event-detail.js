@@ -567,6 +567,14 @@
         if (btn) { btn.click(); }
         sessionStorage.removeItem('admin:openAddTimeBlock');
       }
+      // If navigated with ?edit=1 or #edit, open the Edit Event modal automatically
+      try {
+        const params = new URLSearchParams(location.search || '');
+        if (params.get('edit') === '1' || location.hash === '#edit') {
+          const editBtn = qs('[data-open="#editEventModal"]');
+          if (editBtn) editBtn.click();
+        }
+      } catch (_) {}
       const focusStation = sessionStorage.getItem(FOCUS_STATION_KEY);
       if (focusStation) {
         setTimeout(function() {
@@ -819,8 +827,8 @@
           body: JSON.stringify({ order: payload }),
           credentials: 'same-origin'
         }).then(res => {
-          if (!res.ok) console.warn('Failed to persist station order', res.status);
-        }).catch(err => console.error('Error persisting station order', err));
+          if (!res.ok) { if (ADMIN_DEBUG) console.warn('Failed to persist station order', res.status); }
+        }).catch(err => { if (ADMIN_DEBUG) console.error('Error persisting station order', err); });
       }
 
       // wire events
@@ -841,3 +849,5 @@
     })();
   });
 })();
+// Admin debug logging flag. Set true to enable noisy logs.
+const ADMIN_DEBUG = false;

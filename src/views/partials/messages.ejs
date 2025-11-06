@@ -23,3 +23,14 @@
     </section>
   </div>
 <% } %>
+
+<% if (messages.debug && messages.debug.length > 0) { %>
+  <div class="notice-wrapper">
+    <section class="notice notice--info" role="region" aria-label="Debug information" style="white-space:pre-wrap;">
+      <p class="notice__title">Debug info (temporary)</p>
+      <% messages.debug.forEach(msg => { %>
+        <pre style="margin:0; overflow:auto; max-height:200px;"><%= msg %></pre>
+      <% }) %>
+    </section>
+  </div>
+<% } %>

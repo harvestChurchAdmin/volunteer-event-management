@@ -1,9 +1,9 @@
 <%
   const brand = locals.brand || {};
   const variant = typeof layoutVariant !== 'undefined' ? layoutVariant : 'public';
-  const appName = brand.appName || 'Volunteer Event Manager';
+  const appName = brand.appName || 'Event Sign-up Manager';
   const pageTitle = title || appName;
-  const tagline = brand.appTagline || 'Coordinate volunteer opportunities with an accessible experience.';
+  const tagline = brand.appTagline || 'Coordinate sign-ups with an accessible experience.';
   const faviconUrl = brand.faviconUrl;
   const logoUrl = brand.logoUrl;
   const homePath = brand.homePath || '/';
@@ -59,7 +59,7 @@
     </button>
     <nav id="primary-nav" class="topbar__nav" data-nav data-nav-state="closed">
       <ul class="topbar__menu">
-        <li><a href="/events">Opportunities</a></li>
+        <li><a href="/events">Sign-ups</a></li>
         <% if (user) { %>
           <li><a href="/admin/dashboard">Admin Dashboard</a></li>
         <% } %>

@@ -59,12 +59,15 @@ exports.exportEventCsv = (req, res, next) => {
       'Event Start',
       'Event End',
       'Station',
+      'Item Title',
+      'Feeds',
       'Block Start',
       'Block End',
       'Volunteer Name',
       'Volunteer Email',
       'Volunteer Phone',
-      'Reservation Date'
+      'Reservation Date',
+      'Dish Name'
     ];
 
     function csvEscape(v) {
@@ -82,13 +85,16 @@ exports.exportEventCsv = (req, res, next) => {
         event.name,
         event.date_start,
         event.date_end,
-        r.station,
+        r.station_name || r.station,
+        r.block_title || '',
+        r.servings || '',
         r.block_start,
         r.block_end,
         r.volunteer_name,
         r.volunteer_email,
         r.volunteer_phone,
-        r.reservation_date
+        r.reservation_date,
+        r.reservation_note || ''
       ].map(csvEscape).join(','));
     });
 
@@ -134,17 +140,22 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
     const FIELD_MAP = {
       event_id: ['event_id', 'Event ID'],
       event_name: ['event_name', 'Event'],
+      event_type: ['event_type', 'Event Type'],
       event_description: ['event_description', 'Event Description'],
       event_start: ['event_start', 'Event Start'],
       event_end: ['event_end', 'Event End'],
       station_id: ['station_id', 'Station ID'],
-      station_name: ['station_name', 'Station'],
+      station_name: ['station_name', 'Station/Category'],
       station_about: ['station_about', 'Station About'],
       station_duties: ['station_duties', 'Station Duties'],
       block_id: ['block_id', 'Block ID'],
+      item_title: ['block_title', 'Item Title'],
+      servings: ['servings', 'Feeds'],
+      servings_min: ['servings_min', 'Feeds Min'],
+      servings_max: ['servings_max', 'Feeds Max'],
       block_start: ['block_start', 'Block Start'],
       block_end: ['block_end', 'Block End'],
-      capacity_needed: ['capacity_needed', 'Capacity Needed'],
+      capacity_needed: ['capacity_needed', 'Slots/Units'],
       reserved_count: ['reserved_count', 'Reserved Count'],
       is_full: ['is_full', 'Is Full'],
       reservation_id: ['reservation_id', 'Reservation ID'],
@@ -152,15 +163,23 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
       volunteer_id: ['volunteer_id', 'Volunteer ID'],
       volunteer_name: ['volunteer_name', 'Volunteer Name'],
       volunteer_email: ['volunteer_email', 'Volunteer Email'],
-      volunteer_phone: ['volunteer_phone', 'Volunteer Phone']
+      volunteer_phone: ['volunteer_phone', 'Volunteer Phone'],
+      dish_name: ['reservation_note', 'Dish Name']
     };
 
-    const DEFAULT_FIELDS = [
-      'event_name', 'event_start', 'event_end',
-      'station_name', 'block_start', 'block_end',
-      'volunteer_name', 'volunteer_email', 'volunteer_phone',
-      'reservation_date'
-    ];
+    const DEFAULT_FIELDS = (String(event.signup_mode || '') === 'potluck')
+      ? [
+          'event_name', 'event_start', 'event_end',
+          'station_name', 'item_title', 'block_start', 'block_end',
+          'volunteer_name', 'volunteer_email', 'volunteer_phone',
+          'reservation_date'
+        ]
+      : [
+          'event_name', 'event_start', 'event_end',
+          'station_name', 'block_start', 'block_end',
+          'volunteer_name', 'volunteer_email', 'volunteer_phone',
+          'reservation_date'
+        ];
 
     const chosen = (fields && fields.length ? fields : DEFAULT_FIELDS)
       .filter(key => FIELD_MAP[key])
@@ -256,8 +275,8 @@ exports.createStation = (req, res, next) => {
 exports.createTimeBlock = (req, res, next) => {
   try {
     const { stationId } = req.params;
-    const { start_time, end_time, capacity_needed, event_id } = req.body;
-    adminService.createTimeBlock({ station_id: stationId, start_time, end_time, capacity_needed });
+    const { start_time, end_time, capacity_needed, event_id, title, servings_min, servings_max } = req.body;
+    adminService.createTimeBlock({ station_id: stationId, start_time, end_time, capacity_needed, title, servings_min, servings_max });
     req.flash('success', 'Time block created successfully.');
     res.redirect(`/admin/event/${event_id}`);
   } catch (e) { next(e); }

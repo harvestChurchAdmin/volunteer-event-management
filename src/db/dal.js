@@ -12,6 +12,10 @@ try { db.exec('PRAGMA foreign_keys = ON;'); } catch (_) {}
 try {
   db.prepare(`ALTER TABLE events ADD COLUMN is_published INTEGER NOT NULL DEFAULT 0`).run();
 } catch (_) { /* already exists */ }
+// Event sign-up mode: 'schedule' (stations + time slots) or 'potluck' (categories + items)
+try {
+  db.prepare(`ALTER TABLE events ADD COLUMN signup_mode TEXT NOT NULL DEFAULT 'schedule'`).run();
+} catch (_) { /* already exists */ }
 // Ensure station order column exists so admins can persist manual ordering
 try {
   db.prepare(`ALTER TABLE stations ADD COLUMN station_order INTEGER NOT NULL DEFAULT 0`).run();
@@ -22,6 +26,17 @@ try {
 } catch (_) { /* already exists */ }
 try {
   db.prepare(`ALTER TABLE stations ADD COLUMN description_tasks TEXT`).run();
+} catch (_) { /* already exists */ }
+// Optional label for non-time-based signups (potluck items)
+try {
+  db.prepare(`ALTER TABLE time_blocks ADD COLUMN title TEXT`).run();
+} catch (_) { /* already exists */ }
+// Optional serving size range for potluck items
+try {
+  db.prepare(`ALTER TABLE time_blocks ADD COLUMN servings_min INTEGER`).run();
+} catch (_) { /* already exists */ }
+try {
+  db.prepare(`ALTER TABLE time_blocks ADD COLUMN servings_max INTEGER`).run();
 } catch (_) { /* already exists */ }
 
 try {
@@ -40,6 +55,11 @@ try {
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_volunteer_tokens_event ON volunteer_tokens(event_id)`).run();
 } catch (_) { /* already exists */ }
 
+// Optional notes on reservations (e.g., potluck dish names)
+try {
+  db.prepare(`ALTER TABLE reservations ADD COLUMN note TEXT`).run();
+} catch (_) { /* already exists */ }
+
 /**
  * Convert the better-sqlite3 metadata into a simpler object that callers can
  * rely on. This keeps service code tidy and testable.
@@ -53,8 +73,9 @@ const admin = {
   // List every event for the admin dashboard, including publish state.
   getAllEvents: () => {
     return db.prepare(`
-      SELECT event_id, name, description, date_start, date_end, 
-             COALESCE(is_published, 0) AS is_published
+      SELECT event_id, name, description, date_start, date_end,
+             COALESCE(is_published, 0) AS is_published,
+             COALESCE(signup_mode, 'schedule') AS signup_mode
       FROM events
       ORDER BY datetime(date_start) DESC
     `).all();
@@ -65,15 +86,17 @@ const admin = {
     return db.prepare(`
       SELECT
         e.event_id, e.name, e.description, e.date_start, e.date_end,
+        COALESCE(e.signup_mode, 'schedule') AS signup_mode,
         COALESCE(e.is_published, 0) AS is_published,
         s.station_id,
         s.name AS station_name,
         s.description AS station_description,
         s.description_overview AS station_description_overview,
         s.description_tasks AS station_description_tasks,
-        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed,
+        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max,
         COALESCE(r.cnt, 0) AS reserved_count,
-        CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
+        CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full,
+        COALESCE(rn.notes_csv, '') AS notes_csv
       FROM events e
       LEFT JOIN stations s ON s.event_id = e.event_id
       LEFT JOIN time_blocks tb ON tb.station_id = s.station_id
@@ -82,6 +105,15 @@ const admin = {
         FROM reservations
         GROUP BY block_id
       ) r ON r.block_id = tb.block_id
+      LEFT JOIN (
+        SELECT r.block_id,
+               GROUP_CONCAT(TRIM(r.note), '||') AS notes_csv,
+               GROUP_CONCAT(TRIM(r.note) || '::' || TRIM(v.name), '||') AS notes_with_names_csv
+        FROM reservations r
+        JOIN volunteers v ON v.volunteer_id = r.volunteer_id
+        WHERE r.note IS NOT NULL AND TRIM(r.note) <> ''
+        GROUP BY r.block_id
+      ) rn ON rn.block_id = tb.block_id
       WHERE e.event_id = ?
       -- Prefer explicit station_order when present, fall back to station_id for deterministic ordering
       ORDER BY COALESCE(s.station_order, 0), datetime(tb.start_time) ASC
@@ -98,7 +130,7 @@ const admin = {
         s.description AS station_description,
         s.description_overview AS station_description_overview,
         s.description_tasks AS station_description_tasks,
-        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed,
+        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
       FROM stations s
@@ -123,7 +155,8 @@ const admin = {
         v.name AS volunteer_name,
         v.email AS volunteer_email,
         v.phone_number AS volunteer_phone,
-        r.reservation_date
+        r.reservation_date,
+        r.note AS reservation_note
       FROM time_blocks tb
       JOIN stations s ON s.station_id = tb.station_id
       JOIN events e ON e.event_id = s.event_id
@@ -147,7 +180,8 @@ const admin = {
         tb.station_id,
         tb.start_time,
         tb.end_time,
-        tb.capacity_needed
+        tb.capacity_needed,
+        r.note AS reservation_note
       FROM reservations r
       JOIN volunteers v ON v.volunteer_id = r.volunteer_id
       JOIN time_blocks tb ON tb.block_id = r.block_id
@@ -213,12 +247,12 @@ const admin = {
   },
 
   // Create
-  createEvent: (name, description, startTxt, endTxt) => {
+  createEvent: (name, description, startTxt, endTxt, signupMode) => {
     try {
       const res = db.prepare(`
-        INSERT INTO events (name, description, date_start, date_end, is_published)
-        VALUES (?, ?, ?, ?, 0)
-      `).run(name, description, startTxt, endTxt);
+        INSERT INTO events (name, description, date_start, date_end, is_published, signup_mode)
+        VALUES (?, ?, ?, ?, 0, COALESCE(?, 'schedule'))
+      `).run(name, description, startTxt, endTxt, signupMode || 'schedule');
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error creating event: ' + e.message);
@@ -264,6 +298,7 @@ const admin = {
     if (patch.description !== undefined) { fields.push(`description = ?`); values.push(patch.description); }
     if (patch.date_start !== undefined) { fields.push(`date_start = ?`); values.push(patch.date_start); }
     if (patch.date_end !== undefined) { fields.push(`date_end = ?`); values.push(patch.date_end); }
+    if (patch.signup_mode !== undefined) { fields.push(`signup_mode = ?`); values.push(patch.signup_mode); }
     if (fields.length === 0) return { changes: 0, lastInsertRowid: 0 };
     values.push(eventId);
     try {
@@ -306,6 +341,9 @@ const admin = {
     if (patch.start_time !== undefined) { fields.push(`start_time = ?`); values.push(patch.start_time); }
     if (patch.end_time !== undefined) { fields.push(`end_time = ?`); values.push(patch.end_time); }
     if (patch.capacity_needed !== undefined) { fields.push(`capacity_needed = ?`); values.push(patch.capacity_needed); }
+    if (patch.title !== undefined) { fields.push(`title = ?`); values.push(patch.title); }
+    if (patch.servings_min !== undefined) { fields.push(`servings_min = ?`); values.push(patch.servings_min); }
+    if (patch.servings_max !== undefined) { fields.push(`servings_max = ?`); values.push(patch.servings_max); }
     if (fields.length === 0) return { changes: 0, lastInsertRowid: 0 };
     values.push(blockId);
     try {
@@ -392,10 +430,23 @@ const admin = {
 
 // ---------- Public DAL ----------
 const publicDal = {
+  // Helper: get basic info for specific block IDs
+  getBlocksInfo: (blockIds) => {
+    const ids = Array.from(new Set((Array.isArray(blockIds) ? blockIds : [blockIds]).map(Number).filter(Number.isFinite)));
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT tb.block_id, tb.title, s.event_id
+      FROM time_blocks tb
+      JOIN stations s ON s.station_id = tb.station_id
+      WHERE tb.block_id IN (${placeholders})
+    `).all(ids);
+  },
   // Only published events are listed publicly
   listUpcomingEvents: () => {
     return db.prepare(`
-      SELECT event_id, name, description, date_start, date_end
+      SELECT event_id, name, description, date_start, date_end,
+             COALESCE(signup_mode, 'schedule') AS signup_mode
       FROM events
       WHERE COALESCE(is_published, 0) = 1
         AND datetime(date_end) >= datetime('now')
@@ -407,7 +458,8 @@ const publicDal = {
   getEventBasic: (eventId) => {
     return db.prepare(`
       SELECT event_id, name, description, date_start, date_end,
-             COALESCE(is_published, 0) AS is_published
+             COALESCE(is_published, 0) AS is_published,
+             COALESCE(signup_mode, 'schedule') AS signup_mode
       FROM events
       WHERE event_id = ?
     `).get(eventId);
@@ -418,14 +470,16 @@ const publicDal = {
     return db.prepare(`
       SELECT
         e.event_id, e.name, e.description, e.date_start, e.date_end,
+        COALESCE(e.signup_mode, 'schedule') AS signup_mode,
         s.station_id,
         s.name AS station_name,
         s.description AS station_description,
         s.description_overview AS station_description_overview,
         s.description_tasks AS station_description_tasks,
-        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed,
+        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max,
         COALESCE(r.cnt, 0) AS reserved_count,
-        CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
+        CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full,
+        COALESCE(rn.notes_csv, '') AS notes_csv
       FROM events e
       LEFT JOIN stations s ON s.event_id = e.event_id
       LEFT JOIN time_blocks tb ON tb.station_id = s.station_id
@@ -434,15 +488,55 @@ const publicDal = {
         FROM reservations
         GROUP BY block_id
       ) r ON r.block_id = tb.block_id
+      LEFT JOIN (
+        SELECT block_id, GROUP_CONCAT(TRIM(note), '||') AS notes_csv
+        FROM reservations
+        WHERE note IS NOT NULL AND TRIM(note) <> ''
+        GROUP BY block_id
+      ) rn ON rn.block_id = tb.block_id
       WHERE e.event_id = ?
         AND COALESCE(e.is_published, 0) = 1
       ORDER BY COALESCE(s.station_order, 0), datetime(tb.start_time) ASC
     `).all(eventId);
   },
 
+  // For potluck display: fetch dish notes paired with volunteer names for an event.
+  getDishNotesWithNamesForEvent: (eventId) => {
+    return db.prepare(`
+      SELECT tb.block_id, TRIM(r.note) AS note, TRIM(v.name) AS name
+      FROM reservations r
+      JOIN volunteers v ON v.volunteer_id = r.volunteer_id
+      JOIN time_blocks tb ON tb.block_id = r.block_id
+      JOIN stations s ON s.station_id = tb.station_id
+      WHERE s.event_id = ?
+        AND r.note IS NOT NULL AND TRIM(r.note) <> ''
+    `).all(eventId);
+  },
+
   // Convenience helpers around volunteers and reservations -------------------
   getVolunteerByEmail: (email) => {
-    return db.prepare(`SELECT * FROM volunteers WHERE email = ?`).get(email);
+    // Try exact match first
+    const exact = db.prepare(`SELECT * FROM volunteers WHERE email = ?`).get(email);
+    if (exact) { exact._matchedBy = 'exact'; return exact; }
+    // Gmail-specific fallback: many prior records may have been stored with dots/subaddresses removed.
+    try {
+      const s = String(email || '');
+      const at = s.lastIndexOf('@');
+      if (at > 0) {
+        const local = s.slice(0, at);
+        const domain = s.slice(at + 1).toLowerCase();
+        if (domain === 'gmail.com' || domain === 'googlemail.com') {
+          const base = local.split('+')[0];
+          const dotless = base.replace(/\./g, '');
+          const alt = `${dotless}@${domain}`;
+          if (alt !== s) {
+            const row = db.prepare(`SELECT * FROM volunteers WHERE email = ?`).get(alt);
+            if (row) { row._matchedBy = 'gmail_canonical_alt'; return row; }
+          }
+        }
+      }
+    } catch (_) {}
+    return undefined;
   },
 
   createVolunteer: (name, email, phone) => {
@@ -464,12 +558,12 @@ const publicDal = {
     return (row && row.cnt) || 0;
   },
 
-  createReservation: (volunteerId, blockId) => {
+  createReservation: (volunteerId, blockId, note) => {
     try {
       const res = db.prepare(`
-        INSERT INTO reservations (volunteer_id, block_id, reservation_date)
-        VALUES (?, ?, datetime('now'))
-      `).run(volunteerId, blockId);
+        INSERT INTO reservations (volunteer_id, block_id, reservation_date, note)
+        VALUES (?, ?, datetime('now'), ?)
+      `).run(volunteerId, blockId, note || null);
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error creating reservation: ' + e.message);
@@ -477,12 +571,20 @@ const publicDal = {
   },
 
   // Reserve one or more slots, reusing the volunteer record if the email exists.
-  reserveVolunteerSlots: (volunteer, blockIds) => {
-    const tx = db.transaction((v, ids) => {
+  reserveVolunteerSlots: (volunteer, blockIds, notes) => {
+    const tx = db.transaction((v, ids, n) => {
       let volunteerId;
       const existing = publicDal.getVolunteerByEmail(v.email);
       if (existing) {
         volunteerId = existing.volunteer_id;
+        // If we matched a previously-normalized Gmail record, promote it to the exact email provided now.
+        if (existing._matchedBy === 'gmail_canonical_alt' && existing.email !== v.email) {
+          try {
+            db.prepare(`UPDATE volunteers SET email = ? WHERE volunteer_id = ?`).run(v.email, volunteerId);
+          } catch (e) {
+            // If UNIQUE constraint prevents update, keep existing email and continue.
+          }
+        }
         db.prepare(`UPDATE volunteers SET name = ?, phone_number = ? WHERE volunteer_id = ?`)
           .run(v.name, v.phone, volunteerId);
       } else {
@@ -519,14 +621,20 @@ const publicDal = {
           throw createError(409, 'One or more selected time blocks are already full.');
         }
 
-        publicDal.createReservation(volunteerId, blockId);
+        let noteValue = null;
+        if (n && typeof n === 'object') {
+          noteValue = (n[blockId] != null) ? String(n[blockId]) : null;
+        } else if (typeof n === 'string') {
+          noteValue = n;
+        }
+        publicDal.createReservation(volunteerId, blockId, noteValue);
         created += 1;
       });
 
       return { created, volunteerId, eventId };
     });
 
-    const result = tx(volunteer, blockIds);
+    const result = tx(volunteer, blockIds, notes);
     return {
       count: result.created,
       volunteerId: result.volunteerId,
@@ -587,6 +695,10 @@ const publicDal = {
         r.block_id,
         tb.start_time,
         tb.end_time,
+        tb.title,
+        tb.servings_min,
+        tb.servings_max,
+        r.note AS note,
         s.station_id,
         s.name AS station_name
       FROM reservations r
@@ -599,8 +711,8 @@ const publicDal = {
   },
 
   // Replace an existing reservation set with a new collection of time blocks.
-  replaceVolunteerReservations: (volunteerId, eventId, nextBlockIds) => {
-    const tx = db.transaction((vid, eid, ids) => {
+  replaceVolunteerReservations: (volunteerId, eventId, nextBlockIds, notes) => {
+    const tx = db.transaction((vid, eid, ids, n) => {
       const distinctIds = Array.from(new Set(ids.map(Number).filter(Number.isFinite)));
 
       const existingRows = db.prepare(`
@@ -640,13 +752,33 @@ const publicDal = {
       });
 
       toAdd.forEach(blockId => {
-        publicDal.createReservation(vid, blockId);
+        let noteValue = null;
+        if (n && typeof n === 'object') {
+          noteValue = (n[blockId] != null) ? String(n[blockId]) : null;
+        } else if (typeof n === 'string') {
+          noteValue = n;
+        }
+        publicDal.createReservation(vid, blockId, noteValue);
       });
+
+      // Update notes for all selected reservations when notes map provided
+      if (n && typeof n === 'object') {
+        const updStmt = db.prepare(`UPDATE reservations SET note = ? WHERE volunteer_id = ? AND block_id = ?`);
+        distinctIds.forEach(blockId => {
+          if (Object.prototype.hasOwnProperty.call(n, blockId)) {
+            updStmt.run((n[blockId] != null ? String(n[blockId]) : null), vid, blockId);
+          }
+        });
+      } else if (typeof n === 'string' && n.trim().length) {
+        // Legacy: single note applies to all selected reservations
+        const updAll = db.prepare(`UPDATE reservations SET note = ? WHERE volunteer_id = ? AND block_id = ?`);
+        distinctIds.forEach(blockId => updAll.run(n.trim(), vid, blockId));
+      }
 
       return { added: toAdd.length, removed: toRemove.length };
     });
 
-    return tx(volunteerId, eventId, nextBlockIds);
+    return tx(volunteerId, eventId, nextBlockIds, notes);
   }
 };
 

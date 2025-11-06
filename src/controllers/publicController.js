@@ -29,7 +29,8 @@ exports.showEventDetail = (req, res, next) => {
             req.flash('error', 'That event is no longer available.');
             return res.redirect('/events');
         }
-        res.render('public/event-detail', { title: event.name, event, messages: req.flash(), helpers });
+        // Do not pass messages explicitly; app middleware exposes res.locals.messages
+        res.render('public/event-detail', { title: event.name, event, helpers });
     } catch (error) {
         console.error(`--- ERROR IN showEventDetail for eventId: ${req.params.eventId} ---`, error);
         next(error);
@@ -38,26 +39,49 @@ exports.showEventDetail = (req, res, next) => {
 
 exports.handleSignup = async (req, res, next) => {
     const errors = validationResult(req);
-    const { eventId, blockIds } = req.body;
+    const eventId = req.body.eventId || req.body.event_id || req.body.event;
+    // Accept both blockIds and blockIds[] field names; coerce single value to array
+    let blockIds = [];
+    if (Array.isArray(req.body.blockIds)) blockIds = req.body.blockIds;
+    else if (typeof req.body.blockIds === 'string') blockIds = [req.body.blockIds];
+    else if (Array.isArray(req.body['blockIds[]'])) blockIds = req.body['blockIds[]'];
+    else if (typeof req.body['blockIds[]'] === 'string') blockIds = [req.body['blockIds[]']];
 
-    // Redirect back to the event page if the eventId is missing
+    // Redirect back to the event page if the eventId is missing (debug-friendly)
     if (!eventId) {
-        return next(createError(400, 'Event ID was not provided in the signup form.'));
+        if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
+          try { req.flash('debug', JSON.stringify({ error: 'Missing eventId', body: req.body }, null, 2)); } catch (_) {}
+        }
+        return res.redirect('/events');
     }
 
     if (!blockIds || blockIds.length === 0) {
+        const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
         req.flash('error', 'You must select at least one time slot.');
+        if (debug) {
+          try { req.flash('debug', JSON.stringify({ error: 'No blockIds received', body: req.body }, null, 2)); } catch (_) {}
+          const evt = publicService.getEventDetailsForPublic(eventId);
+          return res.status(400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
+        }
         return res.redirect(`/events/${eventId}`);
     }
 
     if (!errors.isEmpty()) {
-        errors.array().forEach(error => req.flash('error', error.msg));
+        const errs = errors.array();
+        const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
+        errs.forEach(error => req.flash('error', error.msg));
+        if (debug) {
+          try { req.flash('debug', JSON.stringify({ validationErrors: errs, body: req.body }, null, 2)); } catch (_) {}
+          const evt = publicService.getEventDetailsForPublic(eventId);
+          return res.status(400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
+        }
         return res.redirect(`/events/${eventId}`);
     }
     
     try {
         const volunteerData = { name: req.body.name, email: req.body.email, phone: req.body.phone };
-        const result = await publicService.processVolunteerSignup(volunteerData, blockIds);
+        const dishNotes = req.body.dish_notes || {};
+        const result = await publicService.processVolunteerSignup(volunteerData, blockIds, dishNotes);
         res.render('public/success', {
           title: 'Sign-up Successful!',
           count: result.count,
@@ -67,7 +91,21 @@ exports.handleSignup = async (req, res, next) => {
         });
     } catch (error) {
         console.error(`--- ERROR IN handleSignup for eventId: ${eventId} ---`, error);
-        req.flash('error', error.message);
+        const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
+        req.flash('error', error.message || 'We could not process your signup.');
+        if (debug) {
+          const debugBlob = {
+            eventId,
+            blockIds,
+            dish_notes: req.body && req.body.dish_notes ? req.body.dish_notes : undefined,
+            status: error.status || undefined,
+            code: error.code || undefined,
+            message: error.message,
+          };
+          try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
+          const evt = publicService.getEventDetailsForPublic(eventId);
+          return res.status(error.status || 400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
+        }
         res.redirect(`/events/${eventId}`);
     }
 };
@@ -84,14 +122,15 @@ exports.showManageSignup = (req, res, next) => {
         const { event, reservations } = context;
         const selectedBlockIds = reservations.map(r => r.block_id);
 
+        // Do not pass messages here; app middleware already exposed res.locals.messages
+        // Passing messages: req.flash() would consume and clear success flashes before render.
         res.render('public/manage-signup', {
             title: `Manage ${event.name}`,
             event,
             token,
             reservations,
             selectedBlockIds,
-            helpers,
-            messages: req.flash()
+            helpers
         });
     } catch (error) {
         console.error('--- ERROR IN showManageSignup ---', error);
@@ -106,15 +145,48 @@ exports.updateManageSignup = async (req, res, next) => {
         : (req.body['blockIds[]'] ? [].concat(req.body['blockIds[]']) : []);
 
   try {
-        await publicService.updateVolunteerSignup(token, blockIds);
+        const dishNotes = req.body.dish_notes || {};
+        await publicService.updateVolunteerSignup(token, blockIds, dishNotes);
         req.flash('success', 'Your volunteer schedule has been updated. Check your email for confirmation.');
         res.redirect(`/manage/${token}`);
     } catch (error) {
         console.error('--- ERROR IN updateManageSignup ---', error);
         req.flash('error', error.message || 'Unable to update your schedule.');
+        if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
+          const debugBlob = {
+            token,
+            blockIds,
+            dish_notes: req.body && req.body.dish_notes ? req.body.dish_notes : undefined,
+            status: error.status || undefined,
+            code: error.code || undefined,
+            message: error.message,
+          };
+          try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
+        }
         if (error.status === 410) {
             return res.redirect('/events');
         }
         res.redirect(`/manage/${token}`);
     }
+};
+
+// Sends a manage-link reminder email if a volunteer signup exists for the
+// given event and email. Responds with a generic success either way.
+exports.sendManageReminder = async (req, res) => {
+  const eventId = req.body.eventId || req.body.event_id || req.body.event;
+  const email = (req.body.email || '').trim();
+  try {
+    if (!eventId || !email) {
+      // generic message, do not reveal specifics
+      try { req.flash('success', 'If we found a signup for that email, we sent a manage link. Please check your inbox.'); } catch (_) {}
+      return res.redirect(eventId ? `/events/${eventId}` : '/events');
+    }
+    await publicService.sendManageReminder(email, eventId);
+    try { req.flash('success', 'If we found a signup for that email, we sent a manage link. Please check your inbox.'); } catch (_) {}
+    return res.redirect(`/events/${eventId}`);
+  } catch (error) {
+    console.error('--- ERROR IN sendManageReminder ---', error);
+    try { req.flash('success', 'If we found a signup for that email, we sent a manage link. Please check your inbox.'); } catch (_) {}
+    return res.redirect(eventId ? `/events/${eventId}` : '/events');
+  }
 };

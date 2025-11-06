@@ -6,6 +6,7 @@
 // entire application lifecycle (e.g., security middleware, session handling).
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const session = require('express-session');
 const passport = require('passport');
 const helmet = require('helmet');
@@ -23,7 +24,16 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-app.get('/favicon.ico', (req, res) => res.status(204).send());
+// Serve a real favicon if present in the static folder; otherwise return 204.
+app.get('/favicon.ico', (req, res) => {
+    const faviconPath = path.join(__dirname, 'public', 'favicon.ico');
+    fs.stat(faviconPath, (err, stat) => {
+        if (!err && stat && stat.isFile()) {
+            return res.sendFile(faviconPath);
+        }
+        return res.status(204).send();
+    });
+});
 
 const brandingForCsp = getBranding();
 const imgSrc = ["'self'", 'data:'];
@@ -91,6 +101,7 @@ const apiLimiter = rateLimit({
     legacyHeaders: false
 });
 app.use('/signup', apiLimiter);
+app.use('/manage/remind', apiLimiter);
 
 app.use('/', publicRoutes);
 app.use('/admin', adminRoutes);

@@ -4,6 +4,41 @@
 // The Selected Times list is built from the UI text inside each opportunity.
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Toast/snackbar on Manage page ---------------------------------------------------
+  try {
+    const toastRoot = document.getElementById('toast-root');
+    const toastData = document.getElementById('manage-toast-data');
+    const showToast = (message, variant) => {
+      if (!toastRoot || !message) return;
+      const el = document.createElement('div');
+      el.className = 'toast ' + (variant === 'success' ? 'toast--success' : '');
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.innerHTML = `
+        <svg class="toast__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 14.414-4.207-4.207 1.414-1.414L11 13.586l4.793-4.793 1.414 1.414L11 16.414Z"/></svg>
+        <span>${message}</span>
+        <button type="button" class="toast__close" aria-label="Close">×</button>`;
+      toastRoot.appendChild(el);
+      const remove = () => { try { el.remove(); } catch (_) {} };
+      const close = el.querySelector('.toast__close');
+      if (close) close.addEventListener('click', remove);
+      setTimeout(remove, 4200);
+    };
+    // Try data attribute first; fall back to inline success notice text.
+    let successMsg = '';
+    if (toastData) {
+      successMsg = toastData.getAttribute('data-success') || '';
+    }
+    if (successMsg && successMsg.trim()) {
+      showToast(successMsg.trim(), 'success');
+    } else {
+      const inline = document.querySelector('.notice.notice--success');
+      if (inline) {
+        const text = (inline.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) showToast(text, 'success');
+      }
+    }
+  } catch (_) {}
   console.log('DOM fully loaded. Initializing scripts.');
 
   // ---- (Admin pages) datepicker initialization handled in admin JS when a modal opens ----
@@ -173,6 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const signupFormContainer = document.getElementById('signup-form');
     const signupForm = document.getElementById('signupFormTag');
     const selectedSlotsContainer = document.getElementById('selected-slots-container');
+    const selectedPanel = document.getElementById('selected-slots-panel');
+    const isPotluck = signupForm && signupForm.getAttribute('data-is-potluck') === 'true';
     const isManageMode = signupForm && signupForm.getAttribute('data-mode') === 'manage';
     const viewModeSelect = document.getElementById('slot-view-mode');
     const stationView = document.getElementById('slots-by-station');
@@ -181,13 +218,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectionFab = document.getElementById('selection-fab');
     const selectionFabButton = selectionFab ? selectionFab.querySelector('button') : null;
 
-    if (!timeBlockItems.length || !signupFormContainer || !signupForm || !selectedSlotsContainer) {
-      console.debug('[VolunteerUI] No volunteer UI elements detected on this page.');
+    const DEBUG = false;
+    if (!timeBlockItems.length || !signupFormContainer || !signupForm) {
+      if (DEBUG) console.debug('[VolunteerUI] No volunteer UI elements detected on this page.');
       return;
     }
 
-    console.debug('[VolunteerUI] Found', timeBlockItems.length, 'time block entries.');
+    if (DEBUG) console.debug('[VolunteerUI] Found', timeBlockItems.length, 'time block entries.');
     timeBlockItems.slice(0, 5).forEach((el, i) => {
+      if (!DEBUG) return;
       console.debug(`[VolunteerUI] Item[${i}] dataset:`, {
         blockId: el.getAttribute('data-block-id'),
         start: el.getAttribute('data-start-time'),
@@ -201,38 +240,67 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedSlots = []; // { id, displayText, start, end, stationId, stationName, startLabel, endLabel, startRaw, endRaw }
     const originalPlacement = new Map(); // blockId -> { parent, placeholder }
 
+    function isInViewport(el) {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const vw = window.innerWidth || document.documentElement.clientWidth;
+      return r.top < vh && r.bottom > 0 && r.left < vw && r.right > 0;
+    }
+
     function updateSelectionFabVisibility() {
       if (!selectionFab) return;
-      const rect = signupFormContainer.getBoundingClientRect();
-      const beforeForm = rect.top - 120 > window.innerHeight;
-      if (selectedSlots.length > 0 && beforeForm) {
+      let shouldShow = false;
+      if (selectedSlots.length > 0) {
+        if (isPotluck) {
+          // Show while no dish input is visible
+          const firstDish = document.querySelector('#selected-slots-container input[id^="dish-note-"]');
+          shouldShow = !isInViewport(firstDish);
+        } else {
+          // Show while form (contact info) is not visible
+          const rect = signupFormContainer.getBoundingClientRect();
+          const formVisible = rect.top < window.innerHeight && rect.bottom > 0; // any portion visible
+          shouldShow = !formVisible;
+        }
+      }
+
+      if (shouldShow) {
         selectionFab.hidden = false;
         selectionFab.classList.add('is-visible');
-        selectionFab.setAttribute('aria-hidden', 'false');
+        selectionFab.removeAttribute('aria-hidden');
       } else {
+        try {
+          if (selectionFab.contains(document.activeElement)) {
+            if (typeof document.activeElement.blur === 'function') document.activeElement.blur();
+            const focusTarget = signupForm.querySelector('input:not([type="hidden"]), select, textarea');
+            if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus({ preventScroll: true });
+          }
+        } catch (_) {}
         selectionFab.classList.remove('is-visible');
         selectionFab.hidden = true;
         selectionFab.setAttribute('aria-hidden', 'true');
       }
     }
 
-    if (selectionFabButton) {
-      selectionFabButton.addEventListener('click', (event) => {
-        event.preventDefault();
-        try {
-          signupFormContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } catch (err) {
-          signupFormContainer.scrollIntoView();
-        }
-        setTimeout(() => {
-          const focusTarget =
-            signupForm.querySelector('input:not([type="hidden"]), select, textarea');
-          if (focusTarget && typeof focusTarget.focus === 'function') {
-            focusTarget.focus({ preventScroll: true });
+      if (selectionFabButton) {
+        selectionFabButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          try {
+            signupFormContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (err) {
+            signupFormContainer.scrollIntoView();
           }
-        }, 420);
-      });
-    }
+          setTimeout(() => {
+            // On potluck, focus first dish input to avoid users missing it. Otherwise, focus first form field.
+            let focusTarget = isPotluck
+              ? document.querySelector('#selected-slots-container input[id^="dish-note-"]')
+              : signupForm.querySelector('input:not([type="hidden"]), select, textarea');
+            if (focusTarget && typeof focusTarget.focus === 'function') {
+              focusTarget.focus({ preventScroll: true });
+            }
+          }, 420);
+        });
+      }
     if (selectionFab) {
       selectionFab.setAttribute('aria-hidden', 'true');
       const onScroll = () => updateSelectionFabVisibility();
@@ -267,6 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const stationName = item.getAttribute('data-station-name') || '';
       const startRaw = item.getAttribute('data-start-time');
       const endRaw = item.getAttribute('data-end-time');
+      const itemTitle = item.getAttribute('data-item-title') || '';
       if (typeof item.dataset.startTs === 'undefined') {
         item.dataset.startTs = String(computeTimestamp(startRaw));
       }
@@ -289,6 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
         id,
         stationId,
         stationName,
+        itemTitle,
         start: Number(item.dataset.startTs),
         end: Number(item.dataset.endTs),
         startLabel,
@@ -499,16 +569,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
+    function renderStepIndicator() {
+      if (!stepsContainer) return;
+      const hasSelection = selectedSlots.length > 0;
+      const needsDish = isPotluck ? anySelectedNeedsDish() : false;
+      const steps = isPotluck
+        ? ['Select items', 'Enter dish names', 'Enter contact info']
+        : ['Select opportunities', 'Enter contact info', 'Confirm selections'];
+      let activeIdx = 0;
+      if (hasSelection) activeIdx = isPotluck ? (needsDish ? 1 : 2) : 1;
+      stepsContainer.innerHTML = '';
+      const ol = document.createElement('ol');
+      ol.className = 'signup-steps__list';
+      steps.forEach((label, i) => {
+        const li = document.createElement('li');
+        li.className = 'signup-step' + (i === activeIdx ? ' is-active' : '');
+        li.innerHTML = `<span class="signup-step__num">${i + 1}</span><span class="signup-step__label">${label}</span>`;
+        ol.appendChild(li);
+      });
+      stepsContainer.appendChild(ol);
+    }
+
     function renderSelectedList() {
+      if (!selectedSlotsContainer) return; // Schedule mode: no selected list UI
       selectedSlotsContainer.innerHTML = '';
       const title = document.createElement('h4');
-      title.textContent = 'Selected Opportunities';
+      title.textContent = isPotluck ? 'Selected Items' : 'Selected Opportunities';
       selectedSlotsContainer.appendChild(title);
+
+      // Column header removed for clarity/responsiveness; each row now includes its own label.
 
       if (!selectedSlots.length) {
         const empty = document.createElement('p');
         empty.className = 'muted';
-        empty.textContent = 'No opportunities selected.';
+        empty.textContent = 'No selections yet.';
         selectedSlotsContainer.appendChild(empty);
         return;
       }
@@ -525,15 +619,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const stationLine = document.createElement('span');
         stationLine.className = 'selected-slot__station';
-        stationLine.textContent = slot.stationName || slot.displayText || 'Selected opportunity';
+        if (isPotluck) {
+          const cat = (slot.stationName || '').trim();
+          const item = (slot.itemTitle || '').trim();
+          // Build: [Category chip] [Item text with ellipsis]
+          stationLine.textContent = '';
+          stationLine.classList.add('selected-slot__station--inline');
+          const catChip = document.createElement('span');
+          catChip.className = 'cat-chip';
+          catChip.textContent = cat || 'Category';
+          const itemSpan = document.createElement('span');
+          itemSpan.className = 'selected-slot__item';
+          itemSpan.textContent = item || 'Item';
+          if (item) itemSpan.title = `${cat ? cat + ' — ' : ''}${item}`;
+          stationLine.appendChild(catChip);
+          stationLine.appendChild(itemSpan);
+          // keep compact single visual line
+        } else {
+          stationLine.textContent = slot.stationName || slot.displayText || 'Selected opportunity';
+          const timeLine = document.createElement('span');
+          timeLine.className = 'selected-slot__time';
+          timeLine.textContent = formatSelectedSlotTime(slot);
+          textWrap.appendChild(timeLine);
+        }
         textWrap.appendChild(stationLine);
 
-        const timeLine = document.createElement('span');
-        timeLine.className = 'selected-slot__time';
-        timeLine.textContent = formatSelectedSlotTime(slot);
-        textWrap.appendChild(timeLine);
-
         li.appendChild(textWrap);
+
+        // For potluck events, collect a dish name per selected item
+        if (isPotluck) {
+          const noteWrap = document.createElement('div');
+          noteWrap.className = 'selected-slot__note';
+          const labelEl = document.createElement('label');
+          labelEl.textContent = 'Dish name (required)';
+          labelEl.className = 'sr-only';
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.id = `dish-note-${slot.id}`;
+          input.name = `dish_notes[${slot.id}]`;
+          input.placeholder = 'Enter dish name (required)';
+          // Pre-fill from DOM if available (manage view)
+          try {
+            const srcItem = timeBlockItems.find(el => el.getAttribute('data-block-id') === slot.id);
+            if (srcItem) {
+              const existing = srcItem.getAttribute('data-dish-note');
+              if (existing) input.value = existing;
+            }
+          } catch (_) {}
+          noteWrap.appendChild(labelEl);
+          noteWrap.appendChild(input);
+          li.appendChild(noteWrap);
+        }
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -552,12 +688,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       selectedSlotsContainer.appendChild(ul);
 
-      const hint = document.createElement('p');
-      hint.className = 'selected-hint';
-      hint.textContent = 'Complete the form below to confirm your selected opportunities.';
-      selectedSlotsContainer.appendChild(hint);
+      // Removed additional hint text; step headings and required fields guide the flow.
 
-      console.debug('[VolunteerUI] Selected list rendered:', selectedSlots.map(s => ({ id: s.id, displayText: s.displayText })));
+      if (DEBUG) console.debug('[VolunteerUI] Selected list rendered:', selectedSlots.map(s => ({ id: s.id, displayText: s.displayText })));
     }
 
     function rebuildHiddenInputs() {
@@ -570,15 +703,47 @@ document.addEventListener('DOMContentLoaded', () => {
         signupForm.appendChild(hidden);
       });
       const formData = new FormData(signupForm);
-      console.debug('[VolunteerUI] Hidden inputs now:', Array.from(formData.entries()));
+      if (DEBUG) console.debug('[VolunteerUI] Hidden inputs now:', Array.from(formData.entries()));
     }
 
     function updateSignupFormVisibility() {
-      if (isManageMode) {
-        signupFormContainer.style.display = 'block';
-      } else {
-        signupFormContainer.style.display = selectedSlots.length > 0 ? 'block' : 'none';
+      const hasSel = selectedSlots.length > 0;
+      const show = (isManageMode || hasSel);
+      if (selectedPanel) selectedPanel.style.display = show ? 'block' : 'none';
+      if (signupFormContainer) signupFormContainer.style.display = show ? 'block' : 'none';
+      const step2 = document.getElementById('step2Heading');
+      const step3 = document.getElementById('step3Heading');
+      if (step2) step2.style.display = show ? '' : 'none';
+      if (step3) step3.style.display = show ? '' : 'none';
+      const badge = document.getElementById('selectedCountBadge');
+      if (badge) {
+        if (hasSel) {
+          badge.textContent = `(${selectedSlots.length})`;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
       }
+    }
+
+    function anySelectedNeedsDish() {
+      if (!isPotluck) return false;
+      return selectedSlots.some(slot => {
+        const input = document.getElementById(`dish-note-${slot.id}`);
+        const val = input ? String(input.value || '').trim() : '';
+        return val.length === 0;
+      });
+    }
+
+    function updateDishRequirement() {
+      if (!isPotluck) return;
+      selectedSlots.forEach(slot => {
+        const input = document.getElementById(`dish-note-${slot.id}`);
+        if (!input) return;
+        input.setAttribute('required', 'required');
+        input.setAttribute('aria-required', 'true');
+        input.setAttribute('placeholder', 'Enter dish name (required)');
+      });
     }
 
     function updateSelectionFab() {
@@ -621,23 +786,16 @@ document.addEventListener('DOMContentLoaded', () => {
       updateSignupFormVisibility();
       updateConflictingSlots();
       updateSelectionFab();
+      updateDishRequirement();
 
-      if (selectedSlots.length > 0 && item.classList.contains('selected')) {
-        const visibleItems = getVisibleItems();
-        const currentIndex = visibleItems.indexOf(item);
-        if (currentIndex >= 0) {
-          for (let idx = currentIndex + 1; idx < visibleItems.length; idx += 1) {
-            const candidate = visibleItems[idx];
-            const disabled = candidate.getAttribute('data-is-full') === 'true' || candidate.classList.contains('is-full');
-            if (!disabled) {
-              candidate.focus();
-              break;
-            }
-          }
-        }
-      }
+      // Removed auto-scroll on first selection to avoid focus jump. Users can use the
+      // "Continue to sign-up" button to navigate to the form.
 
-      console.debug('[VolunteerUI] Selected opportunities:', selectedSlots);
+      // Do not move focus automatically after selection; this can cause the page
+      // to scroll unexpectedly on mobile. Users can continue selecting or use the
+      // floating button to jump to the form when ready.
+
+      if (DEBUG) console.debug('[VolunteerUI] Selected opportunities:', selectedSlots);
     }
 
     // Pre-populate from any items already marked as selected (manage experience)
@@ -759,12 +917,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial render
     updateSignupFormVisibility();
+    updateDishRequirement();
 
     // Submission debug
     signupForm.addEventListener('submit', (e) => {
       const formData = new FormData(signupForm);
-      console.debug('[VolunteerUI] Submitting with data:', Array.from(formData.entries()));
+      if (DEBUG) console.debug('[VolunteerUI] Submitting with data:', Array.from(formData.entries()));
       // Server persists; we do not alter any times client-side.
+      if (isPotluck) {
+        // Validate per selected slot
+        const missing = [];
+        selectedSlots.forEach(slot => {
+          const input = document.getElementById(`dish-note-${slot.id}`);
+          const val = input ? (input.value || '').trim() : '';
+          // Clear any previous error state
+          if (input) {
+            input.classList.remove('input-error');
+            input.removeAttribute('aria-invalid');
+          }
+          if (!val) {
+            missing.push(slot);
+            if (input) {
+              input.classList.add('input-error');
+              input.setAttribute('aria-invalid', 'true');
+            }
+          }
+        });
+        // Sync per-item dish inputs into hidden inputs inside the form
+        signupForm.querySelectorAll('input[name^="dish_notes["]').forEach(h => { if (h.closest('#selected-slots-container')) h.remove(); });
+        selectedSlots.forEach(slot => {
+          const source = document.getElementById(`dish-note-${slot.id}`);
+          if (!source) return;
+          const hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = `dish_notes[${slot.id}]`;
+          hidden.value = source.value || '';
+          signupForm.appendChild(hidden);
+        });
+        if (missing.length) {
+          e.preventDefault();
+          try {
+            let box = document.getElementById('selectedDishErrors');
+            if (!box) {
+              box = document.createElement('div');
+              box.id = 'selectedDishErrors';
+              box.className = 'notice notice--error';
+              const afterTitle = selectedSlotsContainer.querySelector('h4');
+              if (afterTitle && afterTitle.parentNode === selectedSlotsContainer) {
+                selectedSlotsContainer.insertBefore(box, afterTitle.nextSibling);
+              } else {
+                selectedSlotsContainer.insertBefore(box, selectedSlotsContainer.firstChild);
+              }
+            }
+            const names = missing.map(s => {
+              // Prefer Station — Item text
+              const item = timeBlockItems.find(el => el.getAttribute('data-block-id') === s.id);
+              const itemTitle = item ? (item.getAttribute('data-item-title') || '').trim() : '';
+              const cat = s.stationName || '';
+              return cat && itemTitle ? `${cat} — ${itemTitle}` : (s.displayText || cat || s.id);
+            });
+            box.innerHTML = `<p style="margin:0;">Please enter a dish name for: <strong>${names.join(', ')}</strong>.</p>`;
+            const first = document.getElementById(`dish-note-${missing[0].id}`);
+            if (first && typeof first.focus === 'function') first.focus();
+          } catch (err) { /* ignore */ }
+        }
+      }
     });
 
   } catch (e) {
@@ -822,3 +1039,76 @@ document.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem(debugKey)) toggleDebug(true);
   })();
 });
+  // Generic datetime -> hidden canonical sync for any form using .datetime-field
+  try {
+    function canonicalFromLocal(value) {
+      if (!value) return '';
+      if (value.includes('T')) {
+        const [date, time] = value.split('T');
+        return `${date} ${time.slice(0, 5)}`;
+      }
+      const m = value.match(/^(\d{4})-(\d{2})-(\d{2})[ ](\d{2}):(\d{2})/);
+      if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
+      const d = new Date(value);
+      if (!isNaN(d)) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+      return '';
+    }
+
+    function syncDatetimeFields(root) {
+      const forms = Array.from((root || document).querySelectorAll('form'));
+      forms.forEach(form => {
+        if (form._canonInit) return;
+        form.addEventListener('submit', () => {
+          form.querySelectorAll('.datetime-field').forEach(field => {
+            const targetId = field.getAttribute('data-canonical-target');
+            if (!targetId) return;
+            const hidden = document.getElementById(targetId);
+            if (hidden) hidden.value = canonicalFromLocal(field.value);
+          });
+        });
+        form._canonInit = true;
+      });
+    }
+    syncDatetimeFields(document);
+  } catch (err) {
+    console.error('[DatetimeSync] init failed:', err);
+  }
+
+  // Admin Dashboard: validate New Event form client-side (modal)
+  try {
+    const newEventForm = document.getElementById('newEventForm');
+    if (newEventForm) {
+      newEventForm.addEventListener('submit', (e) => {
+        const name = document.getElementById('event-name');
+        const startVisible = document.getElementById('event-start-new');
+        const endVisible = document.getElementById('event-end-new');
+        const errors = [];
+        if (!name || !name.value.trim()) errors.push('Event name is required.');
+        if (!startVisible || !startVisible.value) errors.push('Start date & time is required.');
+        if (!endVisible || !endVisible.value) errors.push('End date & time is required.');
+        if (startVisible && endVisible && startVisible.value && endVisible.value) {
+          const s = new Date(startVisible.value);
+          const t = new Date(endVisible.value);
+          if (!isNaN(s) && !isNaN(t) && t <= s) errors.push('End must be after start.');
+        }
+        if (errors.length) {
+          e.preventDefault();
+          // Render inline error list near the form
+          let box = document.getElementById('newEventErrors');
+          if (!box) {
+            box = document.createElement('div');
+            box.id = 'newEventErrors';
+            box.className = 'notice notice--error';
+            newEventForm.insertBefore(box, newEventForm.firstChild);
+          }
+          box.innerHTML = '<ul>' + errors.map(m => `<li>${m}</li>`).join('') + '</ul>';
+          try { name && name.focus(); } catch (_) {}
+        }
+      });
+    }
+  } catch (err) {
+    console.error('[NewEventValidation] init failed:', err);
+  }

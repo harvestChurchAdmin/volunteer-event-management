@@ -38,4 +38,20 @@ function canonicalLocal(txt) {
   return `${Y}-${M}-${D} ${h}:${mi}`;
 }
 
-module.exports = { fmt12, canonicalLocal };
+function fmtRange(startTxt, endTxt) {
+  const s = parseToDate(startTxt);
+  const e = parseToDate(endTxt);
+  if (!s || !e) {
+    return `${fmt12(startTxt)} – ${fmt12(endTxt)}`;
+  }
+  const sameDay = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate();
+  if (sameDay) {
+    const date = s.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const st = s.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const et = e.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return `${date} • ${st} – ${et}`;
+  }
+  return `${fmt12(startTxt)} – ${fmt12(endTxt)}`;
+}
+
+module.exports = { fmt12, canonicalLocal, fmtRange };

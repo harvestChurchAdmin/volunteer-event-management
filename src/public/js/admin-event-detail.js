@@ -571,8 +571,16 @@
       try {
         const params = new URLSearchParams(location.search || '');
         if (params.get('edit') === '1' || location.hash === '#edit') {
-          const editBtn = qs('[data-open="#editEventModal"]');
-          if (editBtn) editBtn.click();
+          // Open the modal directly (more robust than simulating a click)
+          const modal = qs('#editEventModal');
+          if (modal) {
+            openModal(modal);
+            initDatetimeFields(modal);
+          } else {
+            // Fallback to clicking the opener if present
+            const editBtn = qs('[data-open="#editEventModal"]');
+            if (editBtn) editBtn.click();
+          }
         }
       } catch (_) {}
       const focusStation = sessionStorage.getItem(FOCUS_STATION_KEY);

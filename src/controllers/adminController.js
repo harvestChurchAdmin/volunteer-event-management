@@ -8,7 +8,7 @@ const { validationResult } = require('express-validator');
 exports.showDashboard = (req, res, next) => {
   try {
     const events = adminService.getDashboardData();
-    res.render('admin/dashboard', { title: 'Admin Dashboard', events, messages: req.flash() });
+    res.render('admin/dashboard', { title: 'Admin Dashboard', events, messages: req.flash(), layoutVariant: 'admin' });
   } catch (e) { next(e); }
 };
 
@@ -20,7 +20,7 @@ exports.showEventDetail = (req, res, next) => {
   try {
     const event = adminService.getEventDetailsForAdmin(req.params.eventId);
     if (!event) return next(new Error('Event not found'));
-    res.render('admin/event-detail', { title: `Manage Event`, event, messages: req.flash() });
+    res.render('admin/event-detail', { title: `Manage Event`, event, messages: req.flash(), layoutVariant: 'admin' });
   } catch (e) { next(e); }
 };
 
@@ -233,7 +233,8 @@ exports.exportEventPrintView = (req, res, next) => {
       title: `Printable Roster`,
       event: { ...event, stations },
       helpers,
-      messages: req.flash()
+      messages: req.flash(),
+      layoutVariant: 'admin'
     });
   } catch (e) { next(e); }
 };

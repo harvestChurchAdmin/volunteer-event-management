@@ -665,8 +665,6 @@ const slotPercent = slotTotals.capacity > 0
   </form>
 <%- include('../partials/modal-end', { id: 'timeBlockModal', formId: 'timeBlockForm' }) %>
 
-<%- include('../partials/footer') %>
-
 <!-- Export CSV Options Modal -->
 <%- include('../partials/modal-start', { id: 'exportCsvModal', title: 'Advanced Export' }) %>
   <form id="exportCsvForm" action="/admin/event/<%= event.event_id %>/export.csv" method="GET" novalidate>
@@ -758,3 +756,5 @@ const slotPercent = slotTotals.capacity > 0
     </fieldset>
   </form>
 <%- include('../partials/modal-end', { id: 'exportCsvModal', formId: 'exportCsvForm', footer: undefined }) %>
+
+<%- include('../partials/footer') %>

@@ -78,19 +78,28 @@ const slotPercent = slotTotals.capacity > 0
 <section class="page-header page-shell">
   <div>
     <a href="/admin/dashboard" class="btn-link">&larr; Back to dashboard</a>
-    <h1><%= event.name %>
-      <span class="type-badge <%= isPotluck ? 'type-badge--potluck' : 'type-badge--schedule' %>" style="margin-left:8px;">
+    <h1>
+      <span class="type-icon <%= isPotluck ? 'type-icon--potluck' : 'type-icon--schedule' %>" title="<%= isPotluck ? 'Potluck event' : 'Scheduled event' %>" aria-label="<%= isPotluck ? 'Potluck event' : 'Scheduled event' %>">
         <% if (isPotluck) { %>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 2h2v9a1 1 0 0 1-2 0V2Zm4 0h2v9a1 1 0 0 1-2 0V2Zm9 0c1.657 0 3 1.343 3 3 0 1.302-.839 2.402-2 2.817V22h-2V7.817A3.001 3.001 0 0 1 17 2Z"/></svg>
-          Potluck
+          <!-- Bowl with steam icon for Potluck -->
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <!-- Steam -->
+            <path d="M9 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M12 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M15 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <!-- Bowl -->
+            <path d="M6 11h12v1.2a5.3 5.3 0 0 1-5.3 5.3H11.3A5.3 5.3 0 0 1 6 12.2V11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
         <% } else { %>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h10v2h3a1 1 0 0 1 1 1v3H3V5a1 1 0 0 1 1-1h3V2Zm14 7v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9h18Zm-5 3h-4v4h4v-4Z"/></svg>
-          Schedule
+          <!-- Refined calendar icon -->
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8 3.5v3M16 3.5v3M3.5 10.5h17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
         <% } %>
       </span>
+      <%= event.name %>
     </h1>
     <% if (event.description) { %>
-      <p class="muted"><%= event.description %></p>
+      <div class="rich-text muted"><%- helpers.renderRichText(event.description) %></div>
     <% } %>
     <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
     <% if (slotTotals.capacity > 0) { %>
@@ -105,6 +114,12 @@ const slotPercent = slotTotals.capacity > 0
     <% } %>
   </div>
   <div class="page-header__actions">
+    <a class="btn-link"
+       href="<%= event.is_published
+         ? ('/events/' + event.event_id + '?return=' + encodeURIComponent('/admin/event/' + event.event_id))
+         : ('/events/' + event.event_id + '?preview=1&return=' + encodeURIComponent('/admin/event/' + event.event_id)) %>">
+      <%= event.is_published ? 'View public page' : 'Preview public page' %>
+    </a>
     <details class="dropdown dropdown--float">
       <summary class="btn btn-accent">Actions</summary>
       <div class="dropdown__menu">
@@ -152,6 +167,13 @@ const slotPercent = slotTotals.capacity > 0
     <h2><%= isPotluck ? 'Categories' : 'Stations' %></h2>
     <div class="section-header__actions">
       <button id="newStationBtn" class="btn btn-primary" data-open="#newStationModal"><%= isPotluck ? 'Add category' : 'Add station' %></button>
+      <% if (stations.length > 0) { %>
+        <button type="button"
+                class="btn btn-ghost btn-small"
+                data-open="#reorderStationsModal">
+          <%= isPotluck ? 'Reorder categories' : 'Reorder stations' %>
+        </button>
+      <% } %>
       <div class="split-actions">
         <button type="button" class="btn btn-ghost btn-small js-expand-all">Expand all</button>
         <button type="button" class="btn btn-ghost btn-small js-collapse-all">Collapse all</button>
@@ -159,13 +181,21 @@ const slotPercent = slotTotals.capacity > 0
     </div>
   </div>
   <% if (stations.length > 0) { %>
-    <div class="station-grid js-station-list" data-event-id="<%= event.event_id %>">
+    <div class="station-grid js-station-list" data-event-id="<%= event.event_id %>" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
   <% stations.forEach((station) => { %>
         <%
           const rawBlocks = Array.isArray(station.time_blocks)
             ? station.time_blocks
             : (station.time_blocks ? Object.values(station.time_blocks) : []);
-          const sortedBlocks = rawBlocks.slice().sort((a, b) => toTimestamp(a.start_time) - toTimestamp(b.start_time));
+          const sortedBlocks = rawBlocks.slice().sort((a, b) => {
+            if (isPotluck) {
+              const ao = (typeof a.item_order === 'number' && !Number.isNaN(a.item_order)) ? a.item_order : 0;
+              const bo = (typeof b.item_order === 'number' && !Number.isNaN(b.item_order)) ? b.item_order : 0;
+              if (ao !== bo) return ao - bo;
+              return (a.block_id || 0) - (b.block_id || 0);
+            }
+            return toTimestamp(a.start_time) - toTimestamp(b.start_time);
+          });
           const stationTotals = sortedBlocks.reduce((acc, block) => {
             const capacity = Number(block && block.capacity_needed) || 0;
             const filled = Array.isArray(block && block.reservations) ? block.reservations.length : 0;
@@ -211,6 +241,12 @@ const slotPercent = slotTotals.capacity > 0
                     <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
                     Edit station…
                   </button>
+                  <% if (isPotluck) { %>
+                    <button class="dropdown__link" data-open="#reorderItemsModal-<%= station.station_id %>" type="button">
+                      <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 9h16v2H4V9Zm0 4h10v2H4v-2Z"/></svg>
+                      Reorder items…
+                    </button>
+                  <% } %>
                   <form class="inline-form js-confirm dropdown__item"
                         data-confirm="Delete this station and all its time blocks? This cannot be undone."
                         data-confirm-cta="Delete"
@@ -234,32 +270,35 @@ const slotPercent = slotTotals.capacity > 0
               <% if (stationAbout) { %>
                 <div class="station-card__summary-item">
                   <h3>Description</h3>
-                  <p><%= stationAbout %></p>
+                  <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
                 </div>
               <% } %>
               <% if (stationDuties) { %>
                 <div class="station-card__summary-item">
                   <h3>Duties</h3>
-                  <p><%= stationDuties %></p>
+                  <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
                 </div>
               <% } %>
             </div>
           <% } %>
 
           <% if (sortedBlocks.length > 0) { %>
-            <ul class="admin-block-list" aria-label="<%= isPotluck ? 'Items' : 'Time blocks' %> for <%= station.name %>">
+            <ul class="admin-block-list" aria-label="<%= isPotluck ? 'Items' : 'Time blocks' %> for <%= station.name %>" data-station-id="<%= station.station_id %>">
               <% sortedBlocks.forEach(function(block) { %>
-                <li class="admin-block">
+                <li class="admin-block" data-block-id="<%= block.block_id %>">
                   <div class="admin-block__main">
                     <% if (isPotluck) { %>
-                      <div class="admin-block__times">
-                        <div class="admin-block__pill">
+                      <div class="admin-block__times admin-block__times--potluck">
+                        <div class="admin-block__pill admin-block__pill--item">
                           <span>Item</span>
-                          <strong><%= block.title || '(untitled)' %></strong>
+                          <div class="admin-block__item-row">
+                            <span class="block-drag-handle" aria-hidden="true" title="Drag to reorder item">☰</span>
+                            <span class="admin-block__item-name"><%= block.title || '(untitled item)' %></span>
+                          </div>
                         </div>
-                        <div class="admin-block__pill">
+                        <div class="admin-block__pill admin-block__pill--feeds">
                           <span>Feeds</span>
-                          <strong>
+                          <strong class="admin-block__feeds-value">
                             <%= (function(){
                                   const hasMin = typeof block.servings_min !== 'undefined' && block.servings_min != null;
                                   const hasMax = typeof block.servings_max !== 'undefined' && block.servings_max != null;
@@ -501,17 +540,51 @@ const slotPercent = slotTotals.capacity > 0
             <div class="form-group">
               <label for="station-about-<%= station.station_id %>"><%= isPotluck ? 'Category description' : 'Station description' %></label>
               <textarea id="station-about-<%= station.station_id %>" name="about" rows="3" placeholder="Describe the purpose of this station"><%= station.about || station.description || '' %></textarea>
+              <p class="muted small">Supports simple formatting: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet list</code>, blank line for new paragraph. <a href="/admin/help/formatting">Formatting help</a></p>
             </div>
             <% if (!isPotluck) { %>
               <div class="form-group">
                 <label for="station-duties-<%= station.station_id %>">Volunteer duties</label>
                 <textarea id="station-duties-<%= station.station_id %>" name="duties" rows="3" placeholder="List expectations or tasks for volunteers"><%= station.duties || '' %></textarea>
+                <p class="muted small">Supports simple formatting: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet list</code>, blank line for new paragraph. <a href="/admin/help/formatting">Formatting help</a></p>
               </div>
             <% } %>
           </form>
         <%- include('../partials/modal-end', { id: 'editStationModal-' + station.station_id, formId: 'editStationForm-' + station.station_id }) %>
+
+        <% if (isPotluck && sortedBlocks.length > 0) { %>
+          <!-- Reorder Items Modal -->
+          <%- include('../partials/modal-start', { id: 'reorderItemsModal-' + station.station_id, title: 'Reorder Items' }) %>
+            <div class="form-group">
+              <p class="muted">Drag items up or down to change the order they appear in this category.</p>
+            </div>
+            <ul class="item-reorder-list" data-station-id="<%= station.station_id %>">
+              <% sortedBlocks.forEach(function(block) { %>
+                <li class="item-reorder-row" data-block-id="<%= block.block_id %>">
+                  <span class="block-drag-handle" aria-hidden="true" title="Drag to reorder item">☰</span>
+                  <span class="item-reorder-name"><%= block.title || '(untitled item)' %></span>
+                </li>
+              <% }) %>
+            </ul>
+          <%- include('../partials/modal-end', { id: 'reorderItemsModal-' + station.station_id, formId: undefined }) %>
+        <% } %>
       <% }) %>
     </div>
+
+    <!-- Reorder Stations Modal -->
+    <%- include('../partials/modal-start', { id: 'reorderStationsModal', title: isPotluck ? 'Reorder Categories' : 'Reorder Stations' }) %>
+      <div class="form-group">
+        <p class="muted">Drag <%= isPotluck ? 'categories' : 'stations' %> up or down to change the order they appear on the event.</p>
+      </div>
+      <ul class="item-reorder-list station-reorder-list" data-event-id="<%= event.event_id %>">
+        <% stations.forEach(function(station) { %>
+          <li class="item-reorder-row station-reorder-row" data-station-id="<%= station.station_id %>">
+            <span class="drag-handle" aria-hidden="true" title="Drag to reorder">☰</span>
+            <span class="item-reorder-name"><%= station.name %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <%- include('../partials/modal-end', { id: 'reorderStationsModal', formId: undefined }) %>
   <% } else { %>
     <article class="card card--plain empty-state">
       <h2>No stations yet</h2>
@@ -530,6 +603,7 @@ const slotPercent = slotTotals.capacity > 0
     <div class="form-group">
       <label for="edit-event-description">Description</label>
       <textarea id="edit-event-description" name="description"><%= event.description %></textarea>
+      <p class="muted small">Supports simple formatting: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet list</code>, blank line for new paragraph. <a href="/admin/help/formatting">Formatting help</a></p>
     </div>
         <div class="form-grid two">
           <div class="form-group">

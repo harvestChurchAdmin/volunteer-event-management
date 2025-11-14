@@ -14,7 +14,7 @@ exports.showEventsList = (req, res, next) => {
             // If there are no published events, render a friendly landing page
             return res.render('public/no-events', { title: 'No Volunteer Opportunities' });
         }
-        res.render('public/events-list', { title: 'Upcoming Events', events });
+        res.render('public/events-list', { title: 'Upcoming Events', events, helpers });
     } catch (error) { 
         console.error("--- ERROR IN showEventsList Controller ---", error);
         next(error); 
@@ -24,13 +24,21 @@ exports.showEventsList = (req, res, next) => {
 exports.showEventDetail = (req, res, next) => {
     try {
         const eventId = req.params.eventId;
-        const event = publicService.getEventDetailsForPublic(eventId);
+        const preview = !!(req.user && (req.query.preview === '1' || String(req.query.preview).toLowerCase() === 'true'));
+        // Optional return link (when coming from admin preview). Keep internal paths only.
+        let backTo = null;
+        if (typeof req.query.return === 'string' && req.query.return.startsWith('/')) {
+          backTo = req.query.return;
+        }
+        const event = preview
+          ? publicService.getEventDetailsForPreview(eventId)
+          : publicService.getEventDetailsForPublic(eventId);
         if (!event) {
             req.flash('error', 'That event is no longer available.');
             return res.redirect('/events');
         }
         // Do not pass messages explicitly; app middleware exposes res.locals.messages
-        res.render('public/event-detail', { title: event.name, event, helpers });
+        res.render('public/event-detail', { title: event.name, event, helpers, preview, backTo });
     } catch (error) {
         console.error(`--- ERROR IN showEventDetail for eventId: ${req.params.eventId} ---`, error);
         next(error);

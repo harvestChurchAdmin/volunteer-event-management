@@ -47,7 +47,7 @@ function getDashboardData() {
   return dal.admin.getAllEvents().sort((a, b) => {
     const aDate = new Date(a.date_start).getTime();
     const bDate = new Date(b.date_start).getTime();
-    return aDate - bDate;
+    return bDate - aDate; // Newest (latest start) first
   });
 }
 
@@ -82,6 +82,7 @@ function getEventDetailsForAdmin(eventId) {
     date_start: rows[0].date_start, // already local text
     date_end: rows[0].date_end,     // already local text
     is_published: !!rows[0].is_published,
+    publish_state: rows[0].publish_state || (rows[0].is_published ? 'published' : 'draft'),
     signup_mode: rows[0].signup_mode || 'schedule',
     stations: []
   };
@@ -109,6 +110,7 @@ function getEventDetailsForAdmin(eventId) {
         title: row.title || '',
         servings_min: row.servings_min,
         servings_max: row.servings_max,
+        item_order: typeof row.item_order === 'number' ? row.item_order : (row.item_order != null ? Number(row.item_order) : undefined),
         capacity_needed:
           typeof row.capacity_needed !== 'undefined'
             ? row.capacity_needed
@@ -247,6 +249,7 @@ function getStationDetailsForAdmin(stationId) {
         title: r.title || '',
         servings_min: r.servings_min,
         servings_max: r.servings_max,
+        item_order: typeof r.item_order === 'number' ? r.item_order : (r.item_order != null ? Number(r.item_order) : undefined),
         capacity_needed:
           typeof r.capacity_needed !== 'undefined'
             ? r.capacity_needed
@@ -310,6 +313,7 @@ function setEventPublish(eventId, isPublished) {
   if (!eventId) throw createError(400, 'Event ID required.');
   return dal.admin.setEventPublish(eventId, !!isPublished);
 }
+
 
 /**
  * Create a station for a given event. When a `copyStationId` is provided we
@@ -607,6 +611,22 @@ module.exports = {
       return { station_id, station_order };
     });
     return dal.admin.updateStationsOrder(pairs);
+  },
+  /**
+   * Reorder items (time blocks) within a station. Expects an array of { block_id, item_order }.
+   */
+  reorderBlocks: (stationId, orderArray) => {
+    if (!stationId) throw createError(400, 'Station ID required.');
+    if (!Array.isArray(orderArray)) throw createError(400, 'Order payload must be an array.');
+    const pairs = orderArray.map(item => {
+      const block_id = Number(item.block_id);
+      const item_order = Number(item.item_order);
+      if (!Number.isFinite(block_id) || !Number.isFinite(item_order)) {
+        throw createError(400, 'Invalid block payload.');
+      }
+      return { block_id, item_order };
+    });
+    return dal.admin.updateBlocksOrder(pairs);
   },
   createEvent,
   updateEvent,

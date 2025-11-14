@@ -8,9 +8,14 @@ const createError = require('http-errors');
 try { db.exec('PRAGMA foreign_keys = ON;'); } catch (_) {}
 
 // Lightweight, idempotent schema migrations to keep SQLite aligned.
-// Ensure publish column exists (idempotent)
+// Ensure publish columns exist (idempotent)
 try {
   db.prepare(`ALTER TABLE events ADD COLUMN is_published INTEGER NOT NULL DEFAULT 0`).run();
+} catch (_) { /* already exists */ }
+try {
+  db.prepare(`ALTER TABLE events ADD COLUMN publish_state TEXT NOT NULL DEFAULT 'draft'`).run();
+  // Backfill publish_state based on legacy is_published
+  try { db.prepare(`UPDATE events SET publish_state = 'published' WHERE COALESCE(is_published,0) = 1`).run(); } catch (_) {}
 } catch (_) { /* already exists */ }
 // Event sign-up mode: 'schedule' (stations + time slots) or 'potluck' (categories + items)
 try {
@@ -37,6 +42,11 @@ try {
 } catch (_) { /* already exists */ }
 try {
   db.prepare(`ALTER TABLE time_blocks ADD COLUMN servings_max INTEGER`).run();
+} catch (_) { /* already exists */ }
+
+// Manual ordering for items (potluck time_blocks)
+try {
+  db.prepare(`ALTER TABLE time_blocks ADD COLUMN item_order INTEGER NOT NULL DEFAULT 0`).run();
 } catch (_) { /* already exists */ }
 
 try {
@@ -75,6 +85,7 @@ const admin = {
     return db.prepare(`
       SELECT event_id, name, description, date_start, date_end,
              COALESCE(is_published, 0) AS is_published,
+             COALESCE(publish_state, CASE WHEN COALESCE(is_published,0)=1 THEN 'published' ELSE 'draft' END) AS publish_state,
              COALESCE(signup_mode, 'schedule') AS signup_mode
       FROM events
       ORDER BY datetime(date_start) DESC
@@ -88,12 +99,13 @@ const admin = {
         e.event_id, e.name, e.description, e.date_start, e.date_end,
         COALESCE(e.signup_mode, 'schedule') AS signup_mode,
         COALESCE(e.is_published, 0) AS is_published,
+        COALESCE(e.publish_state, CASE WHEN COALESCE(e.is_published,0)=1 THEN 'published' ELSE 'draft' END) AS publish_state,
         s.station_id,
         s.name AS station_name,
         s.description AS station_description,
         s.description_overview AS station_description_overview,
         s.description_tasks AS station_description_tasks,
-        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max,
+        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max, tb.item_order,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full,
         COALESCE(rn.notes_csv, '') AS notes_csv
@@ -115,8 +127,15 @@ const admin = {
         GROUP BY r.block_id
       ) rn ON rn.block_id = tb.block_id
       WHERE e.event_id = ?
-      -- Prefer explicit station_order when present, fall back to station_id for deterministic ordering
-      ORDER BY COALESCE(s.station_order, 0), datetime(tb.start_time) ASC
+      -- Prefer explicit station_order when present; for potluck use item_order, otherwise chronological.
+      ORDER BY
+        COALESCE(s.station_order, 0),
+        CASE
+          WHEN COALESCE(e.signup_mode, 'schedule') = 'potluck'
+            THEN COALESCE(tb.item_order, 0)
+          ELSE datetime(tb.start_time)
+        END,
+        tb.block_id ASC
     `).all(id);
   },
 
@@ -130,7 +149,7 @@ const admin = {
         s.description AS station_description,
         s.description_overview AS station_description_overview,
         s.description_tasks AS station_description_tasks,
-        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max,
+        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max, tb.item_order,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full
       FROM stations s
@@ -250,8 +269,8 @@ const admin = {
   createEvent: (name, description, startTxt, endTxt, signupMode) => {
     try {
       const res = db.prepare(`
-        INSERT INTO events (name, description, date_start, date_end, is_published, signup_mode)
-        VALUES (?, ?, ?, ?, 0, COALESCE(?, 'schedule'))
+        INSERT INTO events (name, description, date_start, date_end, is_published, publish_state, signup_mode)
+        VALUES (?, ?, ?, ?, 0, 'draft', COALESCE(?, 'schedule'))
       `).run(name, description, startTxt, endTxt, signupMode || 'schedule');
       return mapRun(res);
     } catch (e) {
@@ -280,9 +299,12 @@ const admin = {
   createTimeBlock: (stationId, startTxt, endTxt, capacity) => {
     try {
       const res = db.prepare(`
-        INSERT INTO time_blocks (station_id, start_time, end_time, capacity_needed)
-        VALUES (?, ?, ?, ?)
-      `).run(stationId, startTxt, endTxt, capacity);
+        INSERT INTO time_blocks (station_id, start_time, end_time, capacity_needed, item_order)
+        VALUES (
+          ?, ?, ?, ?,
+          COALESCE((SELECT MAX(item_order) FROM time_blocks WHERE station_id = ?), -1) + 1
+        )
+      `).run(stationId, startTxt, endTxt, capacity, stationId);
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error creating time block: ' + e.message);
@@ -312,12 +334,15 @@ const admin = {
   // Toggle whether an event is visible to the public sign-up page.
   setEventPublish: (eventId, isPublished) => {
     try {
-      const res = db.prepare(`UPDATE events SET is_published = ? WHERE event_id = ?`).run(isPublished ? 1 : 0, eventId);
+      const res = db.prepare(`UPDATE events SET is_published = ?, publish_state = ? WHERE event_id = ?`)
+        .run(isPublished ? 1 : 0, isPublished ? 'published' : 'draft', eventId);
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error setting publish: ' + e.message);
     }
   },
+
+  // deprecated: setEventState removed (use setEventPublish)
 
   // Persist edits to a station's descriptive fields.
   updateStation: (stationId, name, overview, tasks) => {
@@ -426,6 +451,21 @@ const admin = {
       throw createError(500, 'DB error updating station order: ' + e.message);
     }
   },
+  // Update item ordering within a station. Accepts array of { block_id, item_order }
+  updateBlocksOrder: (pairs) => {
+    try {
+      const tx = db.transaction((list) => {
+        const stmt = db.prepare(`UPDATE time_blocks SET item_order = ? WHERE block_id = ?`);
+        for (const p of list) {
+          stmt.run(p.item_order, p.block_id);
+        }
+        return { changes: list.length };
+      });
+      return tx(pairs);
+    } catch (e) {
+      throw createError(500, 'DB error updating block order: ' + e.message);
+    }
+  },
 };
 
 // ---------- Public DAL ----------
@@ -448,7 +488,7 @@ const publicDal = {
       SELECT event_id, name, description, date_start, date_end,
              COALESCE(signup_mode, 'schedule') AS signup_mode
       FROM events
-      WHERE COALESCE(is_published, 0) = 1
+      WHERE COALESCE(publish_state, CASE WHEN COALESCE(is_published,0)=1 THEN 'published' ELSE 'draft' END) = 'published'
         AND datetime(date_end) >= datetime('now')
       ORDER BY datetime(date_start) ASC
     `).all();
@@ -476,7 +516,7 @@ const publicDal = {
         s.description AS station_description,
         s.description_overview AS station_description_overview,
         s.description_tasks AS station_description_tasks,
-        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max,
+        tb.block_id, tb.start_time, tb.end_time, tb.capacity_needed, tb.title, tb.servings_min, tb.servings_max, tb.item_order,
         COALESCE(r.cnt, 0) AS reserved_count,
         CASE WHEN COALESCE(r.cnt, 0) >= tb.capacity_needed THEN 1 ELSE 0 END AS is_full,
         COALESCE(rn.notes_csv, '') AS notes_csv
@@ -495,8 +535,15 @@ const publicDal = {
         GROUP BY block_id
       ) rn ON rn.block_id = tb.block_id
       WHERE e.event_id = ?
-        AND COALESCE(e.is_published, 0) = 1
-      ORDER BY COALESCE(s.station_order, 0), datetime(tb.start_time) ASC
+        AND COALESCE(e.publish_state, CASE WHEN COALESCE(e.is_published,0)=1 THEN 'published' ELSE 'draft' END) = 'published'
+      ORDER BY
+        COALESCE(s.station_order, 0),
+        CASE
+          WHEN COALESCE(e.signup_mode, 'schedule') = 'potluck'
+            THEN COALESCE(tb.item_order, 0)
+          ELSE datetime(tb.start_time)
+        END,
+        tb.block_id ASC
     `).all(eventId);
   },
 
@@ -626,6 +673,9 @@ const publicDal = {
           noteValue = (n[blockId] != null) ? String(n[blockId]) : null;
         } else if (typeof n === 'string') {
           noteValue = n;
+        }
+        if (noteValue != null) {
+          noteValue = String(noteValue).trim().replace(/^\s*,\s*/, '');
         }
         publicDal.createReservation(volunteerId, blockId, noteValue);
         created += 1;
@@ -758,6 +808,9 @@ const publicDal = {
         } else if (typeof n === 'string') {
           noteValue = n;
         }
+        if (noteValue != null) {
+          noteValue = String(noteValue).trim().replace(/^\s*,\s*/, '');
+        }
         publicDal.createReservation(vid, blockId, noteValue);
       });
 
@@ -766,13 +819,18 @@ const publicDal = {
         const updStmt = db.prepare(`UPDATE reservations SET note = ? WHERE volunteer_id = ? AND block_id = ?`);
         distinctIds.forEach(blockId => {
           if (Object.prototype.hasOwnProperty.call(n, blockId)) {
-            updStmt.run((n[blockId] != null ? String(n[blockId]) : null), vid, blockId);
+            let noteValue = n[blockId] != null ? String(n[blockId]) : null;
+            if (noteValue != null) {
+              noteValue = noteValue.trim().replace(/^\s*,\s*/, '');
+            }
+            updStmt.run(noteValue, vid, blockId);
           }
         });
       } else if (typeof n === 'string' && n.trim().length) {
         // Legacy: single note applies to all selected reservations
         const updAll = db.prepare(`UPDATE reservations SET note = ? WHERE volunteer_id = ? AND block_id = ?`);
-        distinctIds.forEach(blockId => updAll.run(n.trim(), vid, blockId));
+        const cleaned = n.trim().replace(/^\s*,\s*/, '');
+        distinctIds.forEach(blockId => updAll.run(cleaned, vid, blockId));
       }
 
       return { added: toAdd.length, removed: toRemove.length };

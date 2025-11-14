@@ -1,0 +1,70 @@
+<%- include('../partials/header', { title, user: locals.user, layoutVariant: 'admin' }) %>
+
+<section class="page-header page-shell">
+  <div>
+    <a href="/admin/dashboard" class="btn-link">&larr; Back to dashboard</a>
+    <h1>Formatting &amp; markup guide</h1>
+    <p class="muted">Use simple, safe markup to make event and category descriptions easier to scan.</p>
+  </div>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain">
+    <h2>Where formatting works</h2>
+    <ul>
+      <li>Event description (create / edit event)</li>
+      <li>Category / station description</li>
+      <li>Volunteer duties / expectations</li>
+    </ul>
+    <p class="muted">HTML is not allowed. Use the lightweight syntax below instead.</p>
+  </article>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain">
+    <h2>Basic examples</h2>
+    <div class="grid two">
+      <div>
+        <h3>Input</h3>
+        <pre><code>Welcome to our annual potluck!
+
+**What to bring**
+- Main dishes
+- Sides
+- Desserts
+
+*Thank you* for helping make this special.</code></pre>
+      </div>
+      <div>
+        <h3>Preview</h3>
+        <div class="rich-text">
+          <%- helpers.renderRichText(`Welcome to our annual potluck!
+
+**What to bring**
+- Main dishes
+- Sides
+- Desserts
+
+*Thank you* for helping make this special.`) %>
+        </div>
+      </div>
+    </div>
+  </article>
+</section>
+
+<section class="page-section page-shell">
+  <article class="card card--plain">
+    <h2>Supported syntax</h2>
+    <ul>
+      <li><strong>Paragraphs:</strong> separate blocks of text with a blank line.</li>
+      <li><strong>Line breaks:</strong> press Enter once to start a new line inside the same paragraph.</li>
+      <li><strong>Bullets:</strong> start a line with <code>- </code> or <code>* </code> to create a bullet item.</li>
+      <li><strong>Bold:</strong> wrap text in <code>**double asterisks**</code>.</li>
+      <li><strong>Italic:</strong> wrap text in <code>*single asterisks*</code>.</li>
+    </ul>
+    <p class="muted">The system automatically escapes HTML, so tags like <code>&lt;script&gt;</code> are shown as text instead of running.</p>
+  </article>
+</section>
+
+<%- include('../partials/footer') %>
+

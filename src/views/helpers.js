@@ -1,5 +1,5 @@
-// Small view helpers for formatting dates used by EJS templates.
-// Keep pure JS and minimal dependencies so templates remain fast.
+// Small view helpers for formatting dates and rich text used by EJS templates.
+// Keep pure JS and minimal dependencies so templates remain fast and safe.
 
 function parseToDate(s) {
   if (!s) return null;
@@ -54,4 +54,84 @@ function fmtRange(startTxt, endTxt) {
   return `${fmt12(startTxt)} – ${fmt12(endTxt)}`;
 }
 
-module.exports = { fmt12, canonicalLocal, fmtRange };
+/**
+ * Render a safe, lightweight rich-text fragment from plain text input.
+ * Supports:
+ *   - Paragraphs (blank line separated)
+ *   - Bullet lists (lines starting with "-" or "*")
+ *   - Line breaks within paragraphs
+ *   - **bold** and *italic* inline markup
+ *
+ * All HTML is escaped first so users cannot inject arbitrary tags; we only
+ * emit a small set of known-safe elements.
+ */
+function renderRichText(input) {
+  if (!input) return '';
+  const text = String(input || '').replace(/\r\n/g, '\n');
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function applyInlineMarkup(str) {
+    let s = escapeHtml(str);
+    // Bold: **text**
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic: *text*
+    s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    return s;
+  }
+
+  const lines = text.split('\n');
+  const out = [];
+  let buf = [];
+  let inList = false;
+
+  function flushParagraph() {
+    if (!buf.length) return;
+    const content = buf.join('<br>');
+    out.push(`<p>${content}</p>`);
+    buf = [];
+  }
+
+  function closeList() {
+    if (inList) {
+      out.push('</ul>');
+      inList = false;
+    }
+  }
+
+  lines.forEach(rawLine => {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) {
+      flushParagraph();
+      closeList();
+      return;
+    }
+
+    const m = line.match(/^[-*]\s+(.*)$/);
+    if (m) {
+      const itemText = applyInlineMarkup(m[1]);
+      if (!inList) {
+        flushParagraph();
+        out.push('<ul>');
+        inList = true;
+      }
+      out.push(`<li>${itemText}</li>`);
+    } else {
+      closeList();
+      buf.push(applyInlineMarkup(line));
+    }
+  });
+
+  flushParagraph();
+  closeList();
+  return out.join('');
+}
+
+module.exports = { fmt12, canonicalLocal, fmtRange, renderRichText };

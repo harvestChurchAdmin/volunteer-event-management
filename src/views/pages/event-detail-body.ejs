@@ -32,13 +32,13 @@ const canonicalLocal = helpers.canonicalLocal;
               <% if (stationAbout) { %>
                 <div class="station-quick-fact">
                   <h4>Description</h4>
-                  <p><%= stationAbout %></p>
+                  <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
                 </div>
               <% } %>
               <% if (stationDuties) { %>
                 <div class="station-quick-fact">
                   <h4>Duties</h4>
-                  <p><%= stationDuties %></p>
+                  <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
                 </div>
               <% } %>
             </div>

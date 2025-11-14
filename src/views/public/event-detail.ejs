@@ -3,10 +3,25 @@
 <% const { fmt12 } = helpers; %>
 <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
 
+<!-- Inline preview indicator now appears near the title; no separate banner -->
+
 <section class="page-header page-shell">
   <div>
-    <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
-    <h1><%= event.name %></h1>
+    <% if (!(typeof preview !== 'undefined' && preview)) { %>
+      <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
+    <% } %>
+    <h1>
+      <% if (typeof preview !== 'undefined' && preview) { %>
+        <span class="preview-chip" title="Admin-only preview">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M2 12s4.5-7 10-7 10 7 10 7-4.5 7-10 7-10-7-10-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+          </svg>
+          Preview
+        </span>
+      <% } %>
+      <%= event.name %>
+    </h1>
     <% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
     <% if (_same) { %>
       <p class="page-subtitle"><%= _s.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) %> — <%= _s.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %> to <%= _e.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %></p>
@@ -14,12 +29,21 @@
       <p class="page-subtitle"><%= fmt12(event.date_start) %> — <%= fmt12(event.date_end) %></p>
     <% } %>
   </div>
+  </div>
+  <% if (typeof backTo === 'string' && backTo) { %>
+    <div class="page-header__actions">
+      <a href="<%= backTo %>" class="btn btn-accent small">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 19l-7-7 7-7v4h9v6h-9v4z"/></svg>
+        Return to manage
+      </a>
+    </div>
+  <% } %>
 </section>
 
 <section class="page-section page-shell">
   <article class="card card--plain">
     <% if (event.description) { %>
-      <p><%= event.description %></p>
+      <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
     <% } else { %>
       <p class="muted"><%= isPotluck ? 'Select a category and item to bring.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
     <% } %>

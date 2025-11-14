@@ -70,13 +70,13 @@
                   <% if (stationAbout) { %>
                     <div class="station-quick-fact">
                       <h3>Description</h3>
-                      <p><%= stationAbout %></p>
+                      <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
                     </div>
                   <% } %>
                   <% if (stationDuties) { %>
                     <div class="station-quick-fact">
                       <h3>Duties</h3>
-                      <p><%= stationDuties %></p>
+                      <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
                     </div>
                   <% } %>
                 </div>

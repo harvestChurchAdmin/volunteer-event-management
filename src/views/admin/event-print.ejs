@@ -32,7 +32,7 @@
     <a href="/admin/event/<%= event.event_id %>" class="btn-link">&larr; Back to manage</a>
     <h1><%= event.name %></h1>
     <% if (event.description) { %>
-      <p class="muted"><%= event.description %></p>
+      <div class="rich-text muted"><%- helpers.renderRichText(event.description) %></div>
     <% } %>
     <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
   </div>

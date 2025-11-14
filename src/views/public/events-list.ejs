@@ -29,7 +29,7 @@
           </p>
           <h2><%= event.name %></h2>
           <% if (event.description) { %>
-            <p class="event-card__copy"><%= event.description %></p>
+            <div class="event-card__copy rich-text"><%- helpers.renderRichText(event.description) %></div>
           <% } %>
         </div>
         <div class="card-actions">

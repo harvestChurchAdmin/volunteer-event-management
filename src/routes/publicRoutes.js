@@ -10,14 +10,37 @@ router.get('/', (req, res) => res.redirect('/events'));
 
 // Public login page for administrators
 router.get('/login', (req, res) => {
-    res.render('login', { title: 'Admin Login', messages: req.flash('error') });
+    const nextUrl = (req.session && req.session.returnTo) || req.query.next || '';
+    if (req.isAuthenticated && req.isAuthenticated()) {
+      const target = (nextUrl && nextUrl.startsWith('/')) ? nextUrl : '/admin/dashboard';
+      return res.redirect(target);
+    }
+    // Precompute the Google auth link with ?next= to preserve desired redirect after auth
+    const googleAuthHref = nextUrl && nextUrl.startsWith('/')
+      ? `/auth/google?next=${encodeURIComponent(nextUrl)}`
+      : '/auth/google';
+    res.render('login', { title: 'Admin Login', messages: req.flash('error'), googleAuthHref });
 });
 
 // List of all upcoming events
 router.get('/events', publicController.showEventsList);
 
 // Detail page for a specific event with signup forms
-router.get('/events/:eventId', publicController.showEventDetail);
+// Event detail; if preview=1 and user not authenticated, require login and send back
+router.get(
+  '/events/:eventId',
+  (req, res, next) => {
+    const wantsPreview = (req.query && (req.query.preview === '1' || String(req.query.preview).toLowerCase() === 'true'));
+    const isAuthed = (req.isAuthenticated && req.isAuthenticated());
+    if (wantsPreview && !isAuthed) {
+      const nextUrl = req.originalUrl || `/events/${req.params.eventId}?preview=1`;
+      if (req.session) req.session.returnTo = nextUrl;
+      return res.redirect(`/login?next=${encodeURIComponent(nextUrl)}`);
+    }
+    next();
+  },
+  publicController.showEventDetail
+);
 
 // Lost manage link reminder — define BEFORE /manage/:token to avoid capturing "remind" as a token
 router.get('/manage/remind', (req, res) => {
@@ -86,14 +109,48 @@ router.get('/signup', (req, res) => {
 
 // --- Authentication routes (Google OAuth) ---
 // Initiate OAuth flow. We keep this at /auth/google so public links are simple.
-router.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+// Capture an optional ?next= param before starting OAuth, so we can restore it in callback
+router.get('/auth/google', (req, res, next) => {
+  const raw = (req.query && req.query.next) || (req.session && req.session.returnTo) || '';
+  let nextUrl = '';
+  if (typeof raw === 'string' && raw) {
+    try { nextUrl = decodeURIComponent(raw); } catch (_) { nextUrl = raw; }
+  }
+  if (typeof nextUrl !== 'string' || !nextUrl.startsWith('/')) {
+    nextUrl = '';
+  }
+  if (nextUrl && req.session) {
+    req.session.returnTo = nextUrl; // normalized
+  }
+  return passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    state: nextUrl || undefined
+  })(req, res, next);
+});
 
 // OAuth callback. Passport's callbackURL is set to `${APP_BASE_URL}/admin/auth/google/callback`.
 router.get('/admin/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/login', failureFlash: true }),
     (req, res) => {
-        // Successful auth -> admin dashboard
-        res.redirect('/admin/dashboard');
+        // Successful auth -> send to originally requested URL if present
+        let redirectTo = '/admin/dashboard';
+        try {
+          // Prefer OAuth state (round-tripped by Google) if provided
+          const state = req.query && req.query.state;
+          if (state && typeof state === 'string') {
+            const decoded = decodeURIComponent(state);
+            if (decoded.startsWith('/')) redirectTo = decoded;
+          }
+          // Fallback to session returnTo
+          if (redirectTo === '/admin/dashboard') {
+            const rt = req.session && req.session.returnTo;
+            if (rt && typeof rt === 'string' && rt.startsWith('/')) {
+              redirectTo = rt;
+            }
+          }
+          if (req.session) delete req.session.returnTo;
+        } catch (_) {}
+        res.redirect(redirectTo);
     }
 );
 

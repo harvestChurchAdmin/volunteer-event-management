@@ -115,6 +115,78 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[Print] Initialization error:', err);
   }
 
+  // Admin Dashboard: client-side sorting for events table
+  try {
+    const eventsTable = document.querySelector('#adminEventsTable');
+    if (eventsTable) {
+      const tbody = eventsTable.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr.event-row'));
+
+      function parseDateForAdmin(raw) {
+        if (!raw) return Number.NaN;
+        let d = new Date(raw);
+        if (Number.isNaN(d.getTime())) {
+          d = new Date(String(raw).replace(' ', 'T'));
+        }
+        if (Number.isNaN(d.getTime())) {
+          d = new Date(String(raw).replace(' ', 'T') + 'Z');
+        }
+        const t = d.getTime();
+        return Number.isNaN(t) ? Number.NaN : t;
+      }
+
+      function applyAdminSort(key, direction) {
+        const dir = direction === 'desc' ? -1 : 1;
+        const sorted = rows.slice().sort((a, b) => {
+          if (key === 'date') {
+            const aRaw = a.getAttribute('data-sort-date') || '';
+            const bRaw = b.getAttribute('data-sort-date') || '';
+            const aTs = parseDateForAdmin(aRaw);
+            const bTs = parseDateForAdmin(bRaw);
+            if (Number.isNaN(aTs) && Number.isNaN(bTs)) return 0;
+            if (Number.isNaN(aTs)) return 1;
+            if (Number.isNaN(bTs)) return -1;
+            if (aTs === bTs) return 0;
+            return aTs < bTs ? -1 * dir : 1 * dir;
+          }
+          if (key === 'name') {
+            const aName = (a.getAttribute('data-sort-name') || '').toLowerCase();
+            const bName = (b.getAttribute('data-sort-name') || '').toLowerCase();
+            return aName.localeCompare(bName) * dir;
+          }
+          if (key === 'status') {
+            const aStatus = (a.getAttribute('data-sort-status') || '').toLowerCase();
+            const bStatus = (b.getAttribute('data-sort-status') || '').toLowerCase();
+            if (aStatus === bStatus) return 0;
+            return aStatus < bStatus ? -1 * dir : 1 * dir;
+          }
+          return 0;
+        });
+
+        sorted.forEach(tr => tbody.appendChild(tr));
+      }
+
+      // Default: newest (latest start) first
+      applyAdminSort('date', 'desc');
+
+      const headers = eventsTable.querySelectorAll('thead th[data-sort-key]');
+      headers.forEach(th => {
+        const key = th.getAttribute('data-sort-key');
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => {
+          const current = th.getAttribute('data-sort-dir') || 'desc';
+          const next = current === 'asc' ? 'desc' : 'asc';
+          headers.forEach(h => h.removeAttribute('aria-sort'));
+          th.setAttribute('data-sort-dir', next);
+          th.setAttribute('aria-sort', next === 'asc' ? 'ascending' : 'descending');
+          applyAdminSort(key, next);
+        });
+      });
+    }
+  } catch (err) {
+    console.error('[AdminDashboard] Failed to initialize table sorting:', err);
+  }
+
   // Generic dropdowns (details.dropdown) — stable + floating portal for dashboard
   try {
 

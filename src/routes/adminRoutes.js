@@ -6,6 +6,7 @@ const { isAuthenticated } = require('../middleware/authMiddleware');
 
 // Dashboard & event detail ----------------------------------------------------
 router.get('/dashboard', isAuthenticated, adminController.showDashboard);
+router.get('/help/formatting', isAuthenticated, adminController.showFormattingHelp);
 router.get('/event/:eventId', isAuthenticated, adminController.showEventDetail);
 // CSV export of event volunteers
 router.get('/event/:eventId/export.csv', isAuthenticated, adminController.exportEventCsvAdvanced);
@@ -20,6 +21,8 @@ router.post('/event/:eventId/stations', isAuthenticated, adminController.createS
 // Reorder stations via AJAX from admin UI
 router.post('/event/:eventId/stations/reorder', isAuthenticated, adminController.reorderStations);
 router.post('/station/:stationId/blocks', isAuthenticated, adminController.createTimeBlock);
+// Reorder blocks/items within a station via AJAX from admin UI
+router.post('/station/:stationId/blocks/reorder', isAuthenticated, adminController.reorderBlocks);
 
 // Update ----------------------------------------------------------------------
 router.post('/event/:eventId/edit', isAuthenticated, adminController.updateEvent);

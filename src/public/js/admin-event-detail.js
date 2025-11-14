@@ -786,49 +786,19 @@
 
     // Drag & drop ordering for stations --------------------------------------
     (function initStationDnD() {
-      const list = qs('.js-station-list');
-      if (!list) return;
-      let dragSrcEl = null;
-
       function evtTargetStation(el) {
-        return el.closest && el.closest('article.station-card');
+        return el.closest && el.closest('[data-station-id]');
       }
 
-      function handleDragStart(e) {
-        const el = evtTargetStation(e.target);
-        if (!el) return;
-        dragSrcEl = el;
-        e.dataTransfer.effectAllowed = 'move';
-        try { e.dataTransfer.setData('text/plain', el.getAttribute('data-station-id')); } catch (err) {}
-        el.classList.add('dragging');
-      }
-
-      function handleDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const over = evtTargetStation(e.target);
-        if (!over || over === dragSrcEl) return;
-        const rect = over.getBoundingClientRect();
-        const before = (e.clientY - rect.top) < (rect.height / 2);
-        if (before) {
-          over.parentNode.insertBefore(dragSrcEl, over);
-        } else {
-          over.parentNode.insertBefore(dragSrcEl, over.nextSibling);
-        }
-      }
-
-      function handleDragEnd(e) {
-        if (dragSrcEl) dragSrcEl.classList.remove('dragging');
-        dragSrcEl = null;
-        persistStationOrder();
-      }
-
-      function persistStationOrder() {
+      function persistStationOrder(list) {
+        if (!list) return;
         const eventId = list.getAttribute('data-event-id');
         if (!eventId) return;
-        const items = Array.from(list.querySelectorAll('article.station-card'));
-        const payload = items.map((it, idx) => ({ station_id: Number(it.getAttribute('data-station-id')), station_order: idx }));
-        // send POST JSON to server
+        const items = Array.from(list.querySelectorAll('[data-station-id]'));
+        const payload = items.map((it, idx) => ({
+          station_id: Number(it.getAttribute('data-station-id')),
+          station_order: idx
+        }));
         fetch(`/admin/event/${encodeURIComponent(eventId)}/stations/reorder`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -839,20 +809,150 @@
         }).catch(err => { if (ADMIN_DEBUG) console.error('Error persisting station order', err); });
       }
 
-      // wire events
-      qsa('article.station-card', list).forEach(item => {
-        item.addEventListener('dragstart', handleDragStart, false);
-        item.addEventListener('dragover', handleDragOver, false);
-        item.addEventListener('dragend', handleDragEnd, false);
-      });
+      function makeStationListDraggable(list) {
+        if (!list) return;
+        let dragSrcEl = null;
 
-      // also support drag by handle (pointerdown -> set draggable)
-      qsa('.drag-handle', list).forEach(h => {
-        h.addEventListener('pointerdown', function() {
-          const card = evtTargetStation(h);
-          if (!card) return;
-          card.setAttribute('draggable', 'true');
+        function handleDragStart(e) {
+          const el = evtTargetStation(e.target);
+          if (!el || el.parentNode !== list) return;
+          dragSrcEl = el;
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', el.getAttribute('data-station-id') || ''); } catch (err) {}
+          el.classList.add('dragging');
+        }
+
+        function handleDragOver(e) {
+          if (!dragSrcEl) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const over = evtTargetStation(e.target);
+          if (!over || over === dragSrcEl || over.parentNode !== list) return;
+          const rect = over.getBoundingClientRect();
+          const before = (e.clientY - rect.top) < (rect.height / 2);
+          if (before) {
+            over.parentNode.insertBefore(dragSrcEl, over);
+          } else {
+            over.parentNode.insertBefore(dragSrcEl, over.nextSibling);
+          }
+        }
+
+        function handleDragEnd() {
+          if (dragSrcEl) dragSrcEl.classList.remove('dragging');
+          persistStationOrder(list);
+          dragSrcEl = null;
+        }
+
+        qsa('[data-station-id]', list).forEach(item => {
+          item.setAttribute('draggable', 'true');
+          item.addEventListener('dragstart', handleDragStart, false);
+          item.addEventListener('dragover', handleDragOver, false);
+          item.addEventListener('dragend', handleDragEnd, false);
         });
+
+        qsa('.drag-handle', list).forEach(h => {
+          h.addEventListener('pointerdown', function() {
+            const card = evtTargetStation(h);
+            if (!card) return;
+            card.setAttribute('draggable', 'true');
+          });
+        });
+      }
+
+      // Main grid list
+      const grid = qs('.js-station-list');
+      if (grid) makeStationListDraggable(grid);
+
+      // Modal list
+      qsa('.station-reorder-list').forEach(makeStationListDraggable);
+    })();
+
+    // Drag & drop ordering for items within stations (potluck only) ----------
+    (function initBlockDnD() {
+      const container = qs('.station-grid.js-station-list');
+      if (!container) return;
+      const isPotluck = container.getAttribute('data-is-potluck') === 'true';
+      if (!isPotluck) return;
+
+      function evtTargetBlock(el) {
+        return el.closest && (el.closest('li.admin-block') || el.closest('li.item-reorder-row'));
+      }
+
+      function persistBlockOrderForList(list, stationId) {
+        const sid = stationId || (list.closest('article.station-card') && list.closest('article.station-card').getAttribute('data-station-id'));
+        const effectiveStationId = sid || list.getAttribute('data-station-id');
+        if (!effectiveStationId) return;
+        const items = Array.from(list.querySelectorAll('[data-block-id]'));
+        const payload = items.map((it, idx) => ({
+          block_id: Number(it.getAttribute('data-block-id')),
+          item_order: idx
+        }));
+        fetch(`/admin/station/${encodeURIComponent(effectiveStationId)}/blocks/reorder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: payload }),
+          credentials: 'same-origin'
+        }).then(res => {
+          if (!res.ok) { if (ADMIN_DEBUG) console.warn('Failed to persist block order', res.status); }
+        }).catch(err => { if (ADMIN_DEBUG) console.error('Error persisting block order', err); });
+      }
+
+      function makeListDraggable(list, stationId) {
+        let dragSrcEl = null;
+
+        function handleDragStart(e) {
+          const el = evtTargetBlock(e.target);
+          if (!el || el.parentNode !== list) return;
+          dragSrcEl = el;
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', el.getAttribute('data-block-id') || ''); } catch (err) {}
+          el.classList.add('dragging');
+        }
+
+        function handleDragOver(e) {
+          if (!dragSrcEl) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const over = evtTargetBlock(e.target);
+          if (!over || over === dragSrcEl || over.parentNode !== list) return;
+          const rect = over.getBoundingClientRect();
+          const before = (e.clientY - rect.top) < (rect.height / 2);
+          if (before) {
+            over.parentNode.insertBefore(dragSrcEl, over);
+          } else {
+            over.parentNode.insertBefore(dragSrcEl, over.nextSibling);
+          }
+        }
+
+        function handleDragEnd() {
+          if (dragSrcEl) dragSrcEl.classList.remove('dragging');
+          persistBlockOrderForList(list, stationId);
+          dragSrcEl = null;
+        }
+
+        qsa('[data-block-id]', list).forEach(item => {
+          item.setAttribute('draggable', 'true');
+          item.addEventListener('dragstart', handleDragStart, false);
+          item.addEventListener('dragover', handleDragOver, false);
+          item.addEventListener('dragend', handleDragEnd, false);
+        });
+
+        qsa('.block-drag-handle', list).forEach(h => {
+          h.addEventListener('pointerdown', function() {
+            const li = evtTargetBlock(h);
+            if (!li) return;
+            li.setAttribute('draggable', 'true');
+          });
+        });
+      }
+
+      // In-card lists
+      qsa('.admin-block-list', container).forEach(list => makeListDraggable(list));
+
+      // Modal reorder lists
+      qsa('.item-reorder-list').forEach(list => {
+        const stationId = list.getAttribute('data-station-id') || null;
+        makeListDraggable(list, stationId);
       });
     })();
   });

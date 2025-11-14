@@ -13,6 +13,21 @@ exports.showDashboard = (req, res, next) => {
 };
 
 /**
+ * Render a simple admin help page describing supported formatting/markup.
+ */
+exports.showFormattingHelp = (req, res, next) => {
+  try {
+    const helpers = require('../views/helpers');
+    res.render('admin/help-formatting', {
+      title: 'Formatting & Markup Help',
+      helpers,
+      messages: req.flash(),
+      layoutVariant: 'admin'
+    });
+  } catch (e) { next(e); }
+};
+
+/**
  * Display the management screen for a specific event, including stations,
  * blocks, and volunteer assignments.
  */
@@ -20,7 +35,14 @@ exports.showEventDetail = (req, res, next) => {
   try {
     const event = adminService.getEventDetailsForAdmin(req.params.eventId);
     if (!event) return next(new Error('Event not found'));
-    res.render('admin/event-detail', { title: `Manage Event`, event, messages: req.flash(), layoutVariant: 'admin' });
+    const helpers = require('../views/helpers');
+    res.render('admin/event-detail', {
+      title: `Manage Event`,
+      event,
+      helpers,
+      messages: req.flash(),
+      layoutVariant: 'admin'
+    });
   } catch (e) { next(e); }
 };
 
@@ -217,11 +239,18 @@ exports.exportEventPrintView = (req, res, next) => {
     const event = adminService.getEventDetailsForAdmin(eventId);
     if (!event) return next(new Error('Event not found'));
 
-    // Sort blocks within each station chronologically for consistent output
+    const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
+    // Sort blocks within each station: by item order for potlucks, otherwise chronologically
     const stations = (Array.isArray(event.stations) ? event.stations : [])
       .map(st => {
         const blocks = Array.isArray(st.time_blocks) ? st.time_blocks.slice() : [];
         blocks.sort((a, b) => {
+          if (isPotluck) {
+            const ao = (typeof a.item_order === 'number' && !Number.isNaN(a.item_order)) ? a.item_order : 0;
+            const bo = (typeof b.item_order === 'number' && !Number.isNaN(b.item_order)) ? b.item_order : 0;
+            if (ao !== bo) return ao - bo;
+            return (a.block_id || 0) - (b.block_id || 0);
+          }
           const A = helpers.canonicalLocal(a.start_time);
           const B = helpers.canonicalLocal(b.start_time);
           return A.localeCompare(B);
@@ -329,6 +358,8 @@ exports.setPublish = (req, res, next) => {
     res.redirect(redirectTo);
   } catch (e) { next(e); }
 };
+
+// removed setState (staging) flow per updated requirements
 
 /**
  * Persist changes to a station's descriptive fields.
@@ -450,6 +481,20 @@ exports.reorderStations = (req, res, next) => {
     const payload = req.body && req.body.order ? req.body.order : null;
     adminService.reorderStations(eventId, payload);
     // Return JSON for XHR clients
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+};
+
+// Reorder blocks/items within a station (expects JSON: { order: [{ block_id, item_order }, ...] })
+/**
+ * Persist drag-and-drop item ordering within a station. Expects `{ order: [...] }` payload
+ * from the client; responds with JSON for XHR consumption.
+ */
+exports.reorderBlocks = (req, res, next) => {
+  try {
+    const { stationId } = req.params;
+    const payload = req.body && req.body.order ? req.body.order : null;
+    adminService.reorderBlocks(stationId, payload);
     res.json({ ok: true });
   } catch (e) { next(e); }
 };

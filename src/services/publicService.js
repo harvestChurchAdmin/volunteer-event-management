@@ -96,6 +96,12 @@ function mapEventRows(rows) {
   return event;
 }
 
+function normalizeDishNote(value) {
+  const s = String(value || '').trim();
+  // Guard against accidental leading commas (e.g., ", Lasagna")
+  return s.replace(/^\s*,\s*/, '');
+}
+
 function getEventDetailsForPublic(eventId) {
   const rows = dal.public.getEventForPublic(eventId);
   const event = mapEventRows(rows);
@@ -123,6 +129,16 @@ function getEventDetailsForPublic(eventId) {
     // Non-fatal: fall back to plain notes
     console.warn('[PublicService] Failed to enrich dish notes with names:', e && e.message);
   }
+  return event;
+}
+
+/**
+ * Admin-only preview: load event details even when not published.
+ * Uses admin DAL join and maps to the public structure so the same template renders.
+ */
+function getEventDetailsForPreview(eventId) {
+  const rows = dal.admin.getEventById(eventId);
+  const event = mapEventRows(rows);
   return event;
 }
 
@@ -367,12 +383,12 @@ async function processVolunteerSignup(volunteerData, blockIds, notesMap) {
     // Some browsers/servers parse bracketed keys into arrays: align by index with ids
     notesMap.forEach((val, idx) => {
       const bid = Number(ids[idx]);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = String(val || '').trim();
+      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(val);
     });
   } else if (notesMap && typeof notesMap === 'object') {
     Object.keys(notesMap).forEach(key => {
       const bid = Number(key);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = String(notesMap[key] || '').trim();
+      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(notesMap[key]);
     });
   }
 
@@ -473,12 +489,12 @@ async function updateVolunteerSignup(token, blockIds, notesMap) {
   if (Array.isArray(notesMap)) {
     notesMap.forEach((val, idx) => {
       const bid = Number(nextIds[idx]);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = String(val || '').trim();
+      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(val);
     });
   } else if (notesMap && typeof notesMap === 'object') {
     Object.keys(notesMap).forEach(key => {
       const bid = Number(key);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = String(notesMap[key] || '').trim();
+      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(notesMap[key]);
     });
   }
 
@@ -580,8 +596,9 @@ async function sendManageReminder(email, eventId) {
 module.exports = {
   getPublicEvents,
   getEventDetailsForPublic,
+  getEventDetailsForPreview,
   processVolunteerSignup,
   getManageContext,
-  updateVolunteerSignup
-  , sendManageReminder
+  updateVolunteerSignup,
+  sendManageReminder
 };

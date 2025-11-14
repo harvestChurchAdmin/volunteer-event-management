@@ -67,13 +67,13 @@ You can swap `MAIL_SERVICE` for direct SMTP settings (`MAIL_HOST`, `MAIL_PORT`, 
 
 ## Admin Workflow Overview
 
-1. **Dashboard** – Create events, view existing entries sorted by start date.
-2. **Stations** – For each event define stations (e.g., check-in, hospitality).
-3. **Time Blocks** – Add time blocks with start/end times and capacity targets.
+1. **Dashboard** – Create events, view existing entries (newest first), and quickly see which events are in the past (dimmed rows with a “Past event” label).
+2. **Stations / Categories** – For each event define stations (schedule mode) or potluck categories (potluck mode).
+3. **Time Blocks / Items** – Add time blocks with start/end times and capacity targets, or potluck items with optional “feeds” ranges.
 4. **Reservations** – Add volunteers directly or review sign-ups, edit/move/remove as needed.
-5. **Publish** – Toggle visibility to push an event live on the volunteer sign-up page.
+5. **Publish** – Toggle visibility to push an event live on the volunteer sign-up page. A “View public page” link opens the public event and preserves a `return` link back to the admin screen.
 
-Drag-and-drop ordering plus local storage persists station layout preferences for each admin. Modals are CSP compatible and keyboard accessible.
+Drag-and-drop ordering plus local storage persists station layout preferences for each admin. Modals are CSP compatible and keyboard accessible. The admin dashboard table also supports client-side sorting by name, dates, and status for quick scanning.
 
 ## Testing & Quality
 
@@ -114,6 +114,7 @@ Tune the UI via environment variables (no code edits required):
 - Items have a required “Dish name” input for every selection.
 - “Others bringing” shows dish names plus first name + last initial of the contributor.
 - Cards keep a fixed left column for the item name and an aligned right column for “Others bringing”.
+ - Dish names are normalized on save (trimming whitespace and stripping accidental leading commas), so items like `, Lasagna` are stored and displayed as `Lasagna`.
 
 ## Contributing / GitHub
 

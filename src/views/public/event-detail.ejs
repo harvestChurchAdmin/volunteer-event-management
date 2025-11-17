@@ -2,6 +2,9 @@
 
 <% const { fmt12 } = helpers; %>
 <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
+<% const selectedBlockIds = Array.isArray(locals.selectedBlockIds) ? locals.selectedBlockIds : []; %>
+<% const draftDishNotes = (locals.draftDishNotes && typeof locals.draftDishNotes === 'object') ? locals.draftDishNotes : {}; %>
+<% const formDefaults = locals.formDefaults || {}; %>
 
 <!-- Inline preview indicator now appears near the title; no separate banner -->
 
@@ -125,18 +128,21 @@
               </div>
               <ul class="time-block-list">
                 <% blocks.forEach(block => { %>
+                <% const isSelected = Array.isArray(selectedBlockIds) && selectedBlockIds.includes(block.block_id); %>
+                <% var existingNote = ''; if (isPotluck && draftDishNotes && typeof draftDishNotes === 'object' && Object.prototype.hasOwnProperty.call(draftDishNotes, block.block_id)) { existingNote = draftDishNotes[block.block_id]; } %>
                 <li
-                  class="time-block-item <%= block.is_full ? 'is-full' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
+                  class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
                   data-block-id="<%= block.block_id %>"
                   data-station-id="<%= station.station_id %>"
                   data-station-name="<%= station.name %>"
                   data-start-time="<%= isPotluck ? '' : block.start_time %>"
                   data-end-time="<%= isPotluck ? '' : block.end_time %>"
                   <% if (isPotluck) { %>data-item-title="<%= (block.title || '').replace(/\"/g, '&quot;') %>"<% } %>
-                  data-is-full="<%= !!block.is_full %>"
+                  <% if (isPotluck && existingNote) { %>data-dish-note="<%= (existingNote || '').replace(/\"/g, '&quot;') %>"<% } %>
+                  data-is-full="<%= !!block.is_full && !isSelected %>"
                   role="button"
-                  aria-pressed="false"
-                  tabindex="<%= block.is_full ? -1 : 0 %>"
+                  aria-pressed="<%= isSelected ? 'true' : 'false' %>"
+                  tabindex="<%= block.is_full && !isSelected ? -1 : 0 %>"
                 >
                     <div class="time-block-item__info">
                       <span class="station-chip muted" data-role="station-chip"><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></span>
@@ -212,15 +218,15 @@
         <div class="form-grid two">
           <div class="form-group">
             <label for="signup-name">Full name</label>
-            <input type="text" id="signup-name" name="name" placeholder="Full Name" required>
+            <input type="text" id="signup-name" name="name" placeholder="Full Name" value="<%= formDefaults && formDefaults.name ? formDefaults.name : '' %>" required>
           </div>
           <div class="form-group">
             <label for="signup-email">Email</label>
-            <input type="email" id="signup-email" name="email" placeholder="you@example.com" required>
+            <input type="email" id="signup-email" name="email" placeholder="you@example.com" value="<%= formDefaults && formDefaults.email ? formDefaults.email : '' %>" required>
           </div>
           <div class="form-group full">
             <label for="signup-phone">Phone</label>
-            <input type="tel" id="signup-phone" name="phone" placeholder="(555) 555-1234" required>
+            <input type="tel" id="signup-phone" name="phone" placeholder="(555) 555-1234" value="<%= formDefaults && formDefaults.phone ? formDefaults.phone : '' %>" required>
           </div>
         </div>
         <div class="card-actions">

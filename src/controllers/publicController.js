@@ -80,10 +80,39 @@ exports.handleSignup = async (req, res, next) => {
         errs.forEach(error => req.flash('error', error.msg));
         if (debug) {
           try { req.flash('debug', JSON.stringify({ validationErrors: errs, body: req.body }, null, 2)); } catch (_) {}
-          const evt = publicService.getEventDetailsForPublic(eventId);
-          return res.status(400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
         }
-        return res.redirect(`/events/${eventId}`);
+
+        const evt = publicService.getEventDetailsForPublic(eventId);
+        if (!evt) {
+          return res.redirect('/events');
+        }
+
+        const formDefaults = {
+          name: (req.body && req.body.name) || '',
+          email: (req.body && req.body.email) || '',
+          phone: (req.body && req.body.phone) || ''
+        };
+
+        const selectedBlockIds = Array.isArray(blockIds) ? blockIds : [];
+
+        const rawDishNotes = (req.body && req.body.dish_notes) || {};
+        const draftDishNotes = {};
+        if (rawDishNotes && typeof rawDishNotes === 'object') {
+          Object.keys(rawDishNotes).forEach(key => {
+            if (!Object.prototype.hasOwnProperty.call(rawDishNotes, key)) return;
+            draftDishNotes[key] = String(rawDishNotes[key] || '');
+          });
+        }
+
+        return res.status(400).render('public/event-detail', {
+          title: (evt && evt.name) || 'Event',
+          event: evt,
+          helpers,
+          formDefaults,
+          selectedBlockIds,
+          draftDishNotes,
+          messages: req.flash()
+        });
     }
     
     try {

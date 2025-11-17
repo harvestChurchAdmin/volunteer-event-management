@@ -19,6 +19,11 @@ exports.validateSignup = [
     body('phone')
         .trim()
         .notEmpty().withMessage('Phone number is required.')
-        // Loosen phone validation to avoid false negatives across locales
-        .isLength({ min: 7, max: 24 }).withMessage('Please provide a valid phone number.')
+        .custom(value => {
+            const digits = String(value || '').replace(/\D/g, '');
+            if (digits.length !== 10) {
+                throw new Error('Phone number must be 10 digits.');
+            }
+            return true;
+        })
 ];

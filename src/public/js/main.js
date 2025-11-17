@@ -342,10 +342,8 @@ document.addEventListener('DOMContentLoaded', () => {
         selectionFab.removeAttribute('aria-hidden');
       } else {
         try {
-          if (selectionFab.contains(document.activeElement)) {
-            if (typeof document.activeElement.blur === 'function') document.activeElement.blur();
-            const focusTarget = signupForm.querySelector('input:not([type="hidden"]), select, textarea');
-            if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus({ preventScroll: true });
+          if (selectionFab.contains(document.activeElement) && document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
           }
         } catch (_) {}
         selectionFab.classList.remove('is-visible');
@@ -354,25 +352,56 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-      if (selectionFabButton) {
-        selectionFabButton.addEventListener('click', (event) => {
-          event.preventDefault();
-          try {
-            signupFormContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          } catch (err) {
-            signupFormContainer.scrollIntoView();
+    if (selectionFabButton) {
+      selectionFabButton.addEventListener('click', (event) => {
+        event.preventDefault();
+
+        if (isPotluck) {
+          // Potluck: scroll to the first dish name field in Step 2 and focus it.
+          const firstDish = document.querySelector('#selected-slots-container input[id^="dish-note-"]');
+          let scrollTarget = firstDish;
+          if (firstDish) {
+            const card = firstDish.closest('.selected-slot') ||
+              firstDish.closest('.card') ||
+              firstDish.closest('.signup-panel');
+            if (card) scrollTarget = card;
+          } else {
+            const step2Heading = document.getElementById('step2Heading');
+            scrollTarget = selectedPanel || step2Heading || signupFormContainer;
           }
+
+          if (!scrollTarget) return;
+
+          try {
+            scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (err) {
+            scrollTarget.scrollIntoView();
+          }
+
           setTimeout(() => {
-            // On potluck, focus first dish input to avoid users missing it. Otherwise, focus first form field.
-            let focusTarget = isPotluck
-              ? document.querySelector('#selected-slots-container input[id^="dish-note-"]')
-              : signupForm.querySelector('input:not([type="hidden"]), select, textarea');
-            if (focusTarget && typeof focusTarget.focus === 'function') {
-              focusTarget.focus({ preventScroll: true });
+            if (!firstDish || typeof firstDish.focus !== 'function') return;
+            try {
+              firstDish.focus();
+            } catch (_) {
+              firstDish.focus();
             }
           }, 420);
-        });
-      }
+        } else {
+          // Standard volunteer signup: scroll to Step 2 review panel, but do not auto-focus
+          // any field so the keyboard does not pop up and hide selections on mobile.
+          const step2Heading = document.getElementById('step2Heading');
+          const scrollTarget = step2Heading || selectedPanel || signupFormContainer;
+
+          if (!scrollTarget) return;
+
+          try {
+            scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (err) {
+            scrollTarget.scrollIntoView();
+          }
+        }
+      });
+    }
     if (selectionFab) {
       selectionFab.setAttribute('aria-hidden', 'true');
       const onScroll = () => updateSelectionFabVisibility();
@@ -987,11 +1016,105 @@ document.addEventListener('DOMContentLoaded', () => {
       applyViewMode(viewModeSelect.value === 'time' ? 'time' : 'station');
     }
 
+    // Helpers for inline contact validation
+    const emailInput = signupForm.querySelector('#signup-email');
+    const phoneInput = signupForm.querySelector('#signup-phone');
+
+    function getErrorIdForInput(input) {
+      const base = input.id || input.name || 'field';
+      return `${base}-error`;
+    }
+
+    function clearFieldError(input) {
+      if (!input) return;
+      input.classList.remove('input-error');
+      input.removeAttribute('aria-invalid');
+      const errorId = getErrorIdForInput(input);
+      const existing = document.getElementById(errorId);
+      if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+      const describedBy = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+      const next = describedBy.filter(id => id !== errorId);
+      if (next.length) {
+        input.setAttribute('aria-describedby', next.join(' '));
+      } else {
+        input.removeAttribute('aria-describedby');
+      }
+    }
+
+    function setFieldError(input, message) {
+      if (!input) return;
+      clearFieldError(input);
+      input.classList.add('input-error');
+      input.setAttribute('aria-invalid', 'true');
+      const errorId = getErrorIdForInput(input);
+      const error = document.createElement('p');
+      error.id = errorId;
+      error.className = 'field-error';
+      error.textContent = message;
+      const parent = input.parentNode;
+      if (parent) {
+        if (input.nextSibling) {
+          parent.insertBefore(error, input.nextSibling);
+        } else {
+          parent.appendChild(error);
+        }
+      }
+      const describedBy = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+      if (!describedBy.includes(errorId)) {
+        describedBy.push(errorId);
+        input.setAttribute('aria-describedby', describedBy.join(' '));
+      }
+    }
+
+    function validateEmailField() {
+      if (!emailInput) return true;
+      const value = String(emailInput.value || '').trim();
+      clearFieldError(emailInput);
+      if (!value) {
+        setFieldError(emailInput, 'Email is required.');
+        return false;
+      }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+        setFieldError(emailInput, 'Please provide a valid email address.');
+        return false;
+      }
+      return true;
+    }
+
+    function validatePhoneField() {
+      if (!phoneInput) return true;
+      const raw = String(phoneInput.value || '').trim();
+      const digits = raw.replace(/\D/g, '');
+      clearFieldError(phoneInput);
+      if (!raw) {
+        setFieldError(phoneInput, 'Phone number is required.');
+        return false;
+      }
+      if (digits.length !== 10) {
+        setFieldError(phoneInput, 'Phone number must be 10 digits.');
+        return false;
+      }
+      return true;
+    }
+
+    if (emailInput) {
+      emailInput.addEventListener('blur', () => {
+        validateEmailField();
+      });
+    }
+    if (phoneInput) {
+      phoneInput.addEventListener('blur', () => {
+        validatePhoneField();
+      });
+    }
+
     // Initial render
     updateSignupFormVisibility();
     updateDishRequirement();
 
-    // Submission debug
+    // Submission debug and client-side validation
     signupForm.addEventListener('submit', (e) => {
       const formData = new FormData(signupForm);
       if (DEBUG) console.debug('[VolunteerUI] Submitting with data:', Array.from(formData.entries()));
@@ -1052,6 +1175,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const first = document.getElementById(`dish-note-${missing[0].id}`);
             if (first && typeof first.focus === 'function') first.focus();
           } catch (err) { /* ignore */ }
+        }
+      }
+
+      const emailValid = validateEmailField();
+      const phoneValid = validatePhoneField();
+      if (!emailValid || !phoneValid) {
+        e.preventDefault();
+        const firstInvalid = !emailValid && emailInput ? emailInput : (!phoneValid && phoneInput ? phoneInput : null);
+        if (firstInvalid && typeof firstInvalid.focus === 'function') {
+          firstInvalid.focus();
         }
       }
     });

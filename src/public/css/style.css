@@ -2823,6 +2823,12 @@ textarea {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
 }
 
+.field-error {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
 #selected-slots-container li:hover {
   background: rgba(37, 99, 235, 0.06);
 }

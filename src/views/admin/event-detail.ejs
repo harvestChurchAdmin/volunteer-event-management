@@ -296,19 +296,22 @@ const slotPercent = slotTotals.capacity > 0
                             <span class="admin-block__item-name"><%= block.title || '(untitled item)' %></span>
                           </div>
                         </div>
-                        <div class="admin-block__pill admin-block__pill--feeds">
-                          <span>Feeds</span>
-                          <strong class="admin-block__feeds-value">
-                            <%= (function(){
-                                  const hasMin = typeof block.servings_min !== 'undefined' && block.servings_min != null;
-                                  const hasMax = typeof block.servings_max !== 'undefined' && block.servings_max != null;
-                                  if (hasMin && hasMax) return String(block.servings_min) + '–' + String(block.servings_max);
-                                  if (hasMin) return String(block.servings_min);
-                                  if (hasMax) return '≤' + String(block.servings_max);
-                                  return '';
-                                })() %>
-                          </strong>
-                        </div>
+                        <% const hasFeeds = block.servings_min != null || block.servings_max != null; %>
+                        <% if (hasFeeds) { %>
+                          <div class="admin-block__pill admin-block__pill--feeds">
+                            <span>Feeds</span>
+                            <strong class="admin-block__feeds-value">
+                              <%= (function(){
+                                    const hasMin = typeof block.servings_min !== 'undefined' && block.servings_min != null;
+                                    const hasMax = typeof block.servings_max !== 'undefined' && block.servings_max != null;
+                                    if (hasMin && hasMax) return String(block.servings_min) + '–' + String(block.servings_max);
+                                    if (hasMin) return String(block.servings_min);
+                                    if (hasMax) return '≤' + String(block.servings_max);
+                                    return '';
+                                  })() %>
+                            </strong>
+                          </div>
+                        <% } %>
                       </div>
                     <% } else { %>
                       <div class="admin-block__times">

@@ -40,6 +40,27 @@ function cmpLocal(a, b) {
 }
 
 /**
+ * Allow "Feeds" min/max to be optional in forms. Returns `{ provided, value }`
+ * where `provided` tells us if the field was present (even if blank) and
+ * `value` is either a non-negative number or `null` to clear it.
+ */
+function normalizeServingsValue(v) {
+  if (v === undefined) return { provided: false, value: undefined };
+  if (v === null) return { provided: true, value: null };
+  if (typeof v === 'string' && v.trim() === '') return { provided: true, value: null };
+  const n = Number(v);
+  if (!Number.isFinite(n)) return { provided: true, value: null };
+  if (n < 0) throw createError(400, 'Feeds must be zero or greater.');
+  return { provided: true, value: n };
+}
+
+function validateServingsRange(min, max) {
+  if (min != null && max != null && max < min) {
+    throw createError(400, 'Feeds max must be greater than or equal to min.');
+  }
+}
+
+/**
  * Retrieve all events for the admin dashboard sorted chronologically so that
  * coordinators always see the next event first.
  */
@@ -157,10 +178,10 @@ function getEventRosterForExport(eventId, opts = {}) {
           block_id: block.block_id,
           block_start: block.start_time,
           block_end: block.end_time,
-          servings_min: typeof block.servings_min !== 'undefined' ? block.servings_min : '',
-          servings_max: typeof block.servings_max !== 'undefined' ? block.servings_max : '',
-          servings: (typeof block.servings_min !== 'undefined' && block.servings_min != null)
-            ? String(block.servings_min) + ((typeof block.servings_max !== 'undefined' && block.servings_max != null) ? `-${block.servings_max}` : '')
+          servings_min: block.servings_min != null ? block.servings_min : '',
+          servings_max: block.servings_max != null ? block.servings_max : '',
+          servings: (block.servings_min != null)
+            ? String(block.servings_min) + (block.servings_max != null ? `-${block.servings_max}` : '')
             : '',
           block_title: block.title || '',
           capacity_needed: block.capacity_needed,
@@ -432,11 +453,6 @@ function createTimeBlock(data) {
     if (!title) throw createError(400, 'Item name is required.');
     if (!start_time) start_time = event.date_start;
     if (!end_time) end_time = event.date_end;
-    const minN = Number(servings_min);
-    const maxN = Number(servings_max);
-    if (Number.isFinite(minN) && Number.isFinite(maxN) && maxN < minN) {
-      throw createError(400, 'Feeds max must be greater than or equal to min.');
-    }
   }
 
   if (!start_time || !end_time || typeof capacity_needed === 'undefined') {
@@ -448,13 +464,18 @@ function createTimeBlock(data) {
   const cap = Number(capacity_needed);
   if (!Number.isFinite(cap) || cap < 1) throw createError(400, 'Capacity must be a positive number.');
 
+  const servings = {
+    min: normalizeServingsValue(servings_min),
+    max: normalizeServingsValue(servings_max)
+  };
+  validateServingsRange(servings.min.value, servings.max.value);
+
   const res = dal.admin.createTimeBlock(station_id, startTxt, endTxt, cap);
-  if (title) {
-    const patch = { title: String(title) };
-    const minN = Number(servings_min);
-    const maxN = Number(servings_max);
-    if (Number.isFinite(minN)) patch.servings_min = minN;
-    if (Number.isFinite(maxN)) patch.servings_max = maxN;
+  const patch = {};
+  if (title) patch.title = String(title);
+  if (servings.min.provided) patch.servings_min = servings.min.value;
+  if (servings.max.provided) patch.servings_max = servings.max.value;
+  if (Object.keys(patch).length) {
     dal.admin.updateTimeBlock(res.lastInsertRowid, patch);
   }
   return res;
@@ -474,24 +495,16 @@ function updateTimeBlock(blockId, data) {
     if (!Number.isFinite(cap) || cap < 1) throw createError(400, 'Capacity must be a positive number.');
     patch.capacity_needed = cap;
   }
-  if (data.servings_min !== undefined) {
-    const minN = Number(data.servings_min);
-    if (Number.isFinite(minN) && minN >= 0) patch.servings_min = minN;
-  }
-  if (data.servings_max !== undefined) {
-    const maxN = Number(data.servings_max);
-    if (Number.isFinite(maxN) && maxN >= 0) patch.servings_max = maxN;
-  }
+  const servings = {
+    min: normalizeServingsValue(data.servings_min),
+    max: normalizeServingsValue(data.servings_max)
+  };
+  if (servings.min.provided) patch.servings_min = servings.min.value;
+  if (servings.max.provided) patch.servings_max = servings.max.value;
   if (data.title !== undefined) {
     patch.title = (data.title || '').toString().trim();
   }
-  if (data.servings_min !== undefined || data.servings_max !== undefined) {
-    const minN = Number(data.servings_min);
-    const maxN = Number(data.servings_max);
-    if (Number.isFinite(minN) && Number.isFinite(maxN) && maxN < minN) {
-      throw createError(400, 'Feeds max must be greater than or equal to min.');
-    }
-  }
+  validateServingsRange(servings.min.value, servings.max.value);
   if (patch.start_time && patch.end_time && cmpLocal(patch.start_time, patch.end_time) >= 0) {
     throw createError(400, 'End time must be after start time.');
   }

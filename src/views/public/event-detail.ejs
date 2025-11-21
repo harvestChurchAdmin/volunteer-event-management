@@ -152,9 +152,12 @@
                         <strong><%= helpers.fmtRange(block.start_time, block.end_time) %></strong>
                       <% } %>
                       <% if (isPotluck) { %>
-                        <span class="muted">
-                          • Feeds: <%= (typeof block.servings_min !== 'undefined' && block.servings_min != null) ? block.servings_min : '' %><%= (typeof block.servings_max !== 'undefined' && block.servings_max != null) ? ('–' + block.servings_max) : '' %>
-                        </span>
+                        <% const hasServings = block.servings_min != null || block.servings_max != null; %>
+                        <% if (hasServings) { %>
+                          <span class="muted">
+                            • Feeds: <%= (block.servings_min != null) ? block.servings_min : '' %><%= (block.servings_max != null) ? ('–' + block.servings_max) : '' %>
+                          </span>
+                        <% } %>
                       <% } else { %>
                         <span class="muted"> • Slots: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
                       <% } %>

@@ -3,6 +3,7 @@
 // `public` namespaces so higher tiers never have to write SQL directly.
 const { db } = require('../config/database');
 const createError = require('http-errors');
+const crypto = require('crypto');
 
 // Enforce referential integrity at the SQLite level.
 try { db.exec('PRAGMA foreign_keys = ON;'); } catch (_) {}
@@ -76,6 +77,16 @@ try {
  */
 function mapRun(res) {
   return { changes: res.changes, lastInsertRowid: res.lastInsertRowid };
+}
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token || ''), 'utf8').digest('hex');
+}
+
+function cleanupExpiredTokens() {
+  try {
+    db.prepare(`DELETE FROM volunteer_tokens WHERE expires_at IS NOT NULL AND datetime(expires_at) <= datetime('now')`).run();
+  } catch (_) { /* best effort */ }
 }
 
 // ---------- Admin DAL ----------
@@ -695,18 +706,22 @@ const publicDal = {
 
   // Tokens power "manage my reservation" links. We keep one per volunteer/event.
   storeVolunteerToken: (token, volunteerId, eventId, expiresAt) => {
+    cleanupExpiredTokens();
+    const hashedToken = hashToken(token);
     const txn = db.transaction(() => {
       db.prepare(`DELETE FROM volunteer_tokens WHERE volunteer_id = ? AND event_id = ?`).run(volunteerId, eventId);
       db.prepare(`
         INSERT INTO volunteer_tokens (token, volunteer_id, event_id, expires_at)
         VALUES (?, ?, ?, ?)
-      `).run(token, volunteerId, eventId, expiresAt || null);
+      `).run(hashedToken, volunteerId, eventId, expiresAt || null);
     });
     txn();
     return token;
   },
 
   getVolunteerToken: (token) => {
+    cleanupExpiredTokens();
+    const hashed = hashToken(token);
     const row = db.prepare(`
       SELECT
         t.token,
@@ -724,11 +739,41 @@ const publicDal = {
       JOIN volunteers v ON v.volunteer_id = t.volunteer_id
       JOIN events e ON e.event_id = t.event_id
       WHERE t.token = ?
+    `).get(hashed);
+    if (row) return row;
+
+    // Legacy fallback: accept plaintext tokens still on disk, then promote to hashed.
+    const legacy = db.prepare(`
+      SELECT
+        t.token,
+        t.volunteer_id,
+        t.event_id,
+        t.expires_at,
+        v.name AS volunteer_name,
+        v.email AS volunteer_email,
+        v.phone_number AS volunteer_phone,
+        e.name AS event_name,
+        e.date_start,
+        e.date_end,
+        COALESCE(e.is_published, 0) AS is_published
+      FROM volunteer_tokens t
+      JOIN volunteers v ON v.volunteer_id = t.volunteer_id
+      JOIN events e ON e.event_id = t.event_id
+      WHERE t.token = ?
     `).get(token);
-    return row || null;
+
+    if (legacy) {
+      try {
+        db.prepare(`UPDATE volunteer_tokens SET token = ? WHERE token = ?`).run(hashed, token);
+      } catch (_) { /* best effort */ }
+      return legacy;
+    }
+
+    return null;
   },
 
   getTokenForVolunteerEvent: (volunteerId, eventId) => {
+    cleanupExpiredTokens();
     return db.prepare(`
       SELECT token, volunteer_id, event_id, expires_at
       FROM volunteer_tokens

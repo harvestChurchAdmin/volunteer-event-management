@@ -32,6 +32,7 @@ Key settings (see `.env.example` for defaults and documentation):
 | Variable | Purpose |
 | --- | --- |
 | `SESSION_SECRET` | Cookie-session signing secret. Always change from default. |
+| `SESSION_DB_PATH` | Path to the SQLite file used for session storage (defaults to `db/sessions.db`). |
 | `APP_NAME` | Display name shown in titles, header, and footer. |
 | `APP_TAGLINE` | Short description surfaced in metadata and hero text. |
 | `ORG_DISPLAY_NAME` | Organization name used in emails and other copy. |
@@ -56,6 +57,13 @@ You can swap `MAIL_SERVICE` for direct SMTP settings (`MAIL_HOST`, `MAIL_PORT`, 
 - `npm start` – Production start without watchers.
 - `npm run init-db` – Bootstrap the SQLite schema or reset it during development.
 - `npm test` – Execute automated tests (integration smoke tests today).
+
+## Security defaults
+
+- Sessions are persisted to SQLite (`SESSION_DB_PATH`) with HTTP-only cookies; the server refuses to boot without a strong `SESSION_SECRET`.
+- CSRF protection is enforced on all non-GET requests. Server-rendered forms now include `_csrf` and XHR calls must send the `CSRF-Token` header.
+- Volunteer manage links are hashed at rest and carry expirations (`MANAGE_TOKEN_TTL_DAYS`); new links are issued on every reminder/update.
+- CSV exports neutralize formula injection so malicious values cannot execute when opened in spreadsheet tools.
 
 ## Project Layout
 
@@ -91,10 +99,12 @@ Drag-and-drop ordering plus local storage persists station layout preferences fo
 ## Deployment Checklist
 
 - Set `NODE_ENV=production` and provide a strong `SESSION_SECRET`.
+- Rotate and reissue OAuth, mail, and session secrets if any prior `.env` contents may have leaked.
 - Configure `APP_BASE_URL` with the public hostname (required for OAuth and emails).
 - Set up Google OAuth credentials and allowed domain for admin access.
 - Supply mail credentials (`MAIL_*`) for transactional emails.
 - Run `npm run init-db` on first deploy to create the SQLite schema.
+- Keep `db/*.db` and `SESSION_DB_PATH` files on encrypted disks with restricted filesystem permissions.
 - Use a process manager (PM2, systemd, etc.) to keep `npm start` running.
 - Back up the SQLite database file (`db/volunteer.db`) regularly.
 

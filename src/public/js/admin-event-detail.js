@@ -6,6 +6,13 @@
   function qs(sel, root = document) { return root.querySelector(sel); }
   function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
 
+  const csrfMeta = qs('meta[name="csrf-token"]');
+  const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') || '' : '';
+  function withCsrf(headers = {}) {
+    if (csrfToken) headers['CSRF-Token'] = csrfToken;
+    return headers;
+  }
+
   const modalOpener = new WeakMap();
   const SCROLL_KEY = 'admin:scrollY';
   const FOCUS_STATION_KEY = 'admin:focusStation';
@@ -714,10 +721,10 @@
         method: form.method || 'POST',
         credentials: 'same-origin',
         body: data.toString(),
-        headers: {
+        headers: withCsrf({
           'Content-Type': 'application/x-www-form-urlencoded',
           'X-Requested-With': 'XMLHttpRequest'
-        }
+        })
       }).then(async res => {
         if (res.ok) {
           // Try to parse JSON response if controller implements it
@@ -801,7 +808,7 @@
         }));
         fetch(`/admin/event/${encodeURIComponent(eventId)}/stations/reorder`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: withCsrf({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ order: payload }),
           credentials: 'same-origin'
         }).then(res => {
@@ -916,7 +923,7 @@
         }));
         fetch(`/admin/station/${encodeURIComponent(effectiveStationId)}/blocks/reorder`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: withCsrf({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ order: payload }),
           credentials: 'same-origin'
         }).then(res => {

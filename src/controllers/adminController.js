@@ -105,8 +105,9 @@ exports.exportEventCsv = (req, res, next) => {
       'Dish Name'
     ];
 
-    function csvEscape(v) {
-      const s = v == null ? '' : String(v);
+    function csvEscapeSafe(v) {
+      let s = v == null ? '' : String(v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s; // mitigate CSV/Excel injection
       if (/[",\n\r]/.test(s)) {
         return '"' + s.replace(/"/g, '""') + '"';
       }
@@ -114,7 +115,7 @@ exports.exportEventCsv = (req, res, next) => {
     }
 
     const lines = [];
-    lines.push(headers.map(csvEscape).join(','));
+    lines.push(headers.map(csvEscapeSafe).join(','));
     rows.forEach(r => {
       lines.push([
         event.name,
@@ -130,7 +131,7 @@ exports.exportEventCsv = (req, res, next) => {
         r.volunteer_phone,
         r.reservation_date,
         r.reservation_note || ''
-      ].map(csvEscape).join(','));
+      ].map(csvEscapeSafe).join(','));
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

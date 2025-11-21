@@ -14,6 +14,7 @@
 
 <%- include('../partials/modal-start', { id: 'newEventModal', title: 'Create New Event' }) %>
   <form id="newEventForm" action="/admin/event" method="POST" novalidate>
+    <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
     <div class="form-grid">
       <div class="form-group full">
         <label for="event-name">Event name</label>
@@ -148,6 +149,7 @@
                         <%= event.is_published ? 'View public page' : 'Preview public page' %>
                       </a>
                       <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
+                        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
                         <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
                         <input type="hidden" name="redirectTo" value="/admin/dashboard">
                         <button type="submit" class="dropdown__link">
@@ -156,12 +158,14 @@
                         </button>
                       </form>
                       <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a copy of this event (stations and time blocks only)?" data-confirm-cta="Copy">
+                        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
                         <button type="submit" class="dropdown__link">
                           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v12h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14h13a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/></svg>
                           Copy event
                         </button>
                       </form>
                       <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item" data-confirm="Delete this event and all of its stations, time blocks, and volunteers? This cannot be undone." data-confirm-cta="Delete">
+                        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
                         <button type="submit" class="dropdown__link btn-danger">
                           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
                           Delete

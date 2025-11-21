@@ -81,6 +81,7 @@ const canonicalLocal = helpers.canonicalLocal;
     <div id="selected-slots-container"></div>
     <h3>Enter Your Information to Confirm</h3>
     <form id="signupFormTag" action="/signup" method="POST" novalidate>
+      <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
       <input type="hidden" name="eventId" value="<%= event.event_id %>">
       <input type="text" name="name" placeholder="Full Name" required>
       <input type="email" name="email" placeholder="Email Address" required>

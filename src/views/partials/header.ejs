@@ -18,6 +18,9 @@
   <title><%= fullTitle %></title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="<%= tagline %>">
+  <% if (locals.csrfToken) { %>
+    <meta name="csrf-token" content="<%= locals.csrfToken %>">
+  <% } %>
   <link rel="stylesheet" href="/css/style.css">
   <% if (brand && (brand.brandColor || brand.accentColor || brand.brandStrongColor)) { %>
     <style>

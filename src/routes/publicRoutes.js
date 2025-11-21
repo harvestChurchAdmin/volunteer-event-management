@@ -5,6 +5,22 @@ const passport = require('passport');
 const publicController = require('../controllers/publicController');
 const { validateSignup } = require('../middleware/validators');
 
+function redactBody(body) {
+  if (!body || typeof body !== 'object') return {};
+  try {
+    const clone = JSON.parse(JSON.stringify(body));
+    ['name', 'email', 'phone', 'phone_number'].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(clone, key)) clone[key] = '[redacted]';
+    });
+    if (clone.dish_notes) clone.dish_notes = '[redacted]';
+    if (clone.blockIds) clone.blockIds = Array.isArray(clone.blockIds) ? clone.blockIds.map(() => '[id]') : '[list]';
+    if (clone['blockIds[]']) clone['blockIds[]'] = Array.isArray(clone['blockIds[]']) ? clone['blockIds[]'].map(() => '[id]') : '[list]';
+    return clone;
+  } catch (_) {
+    return {};
+  }
+}
+
 // Home page redirects to the events list
 router.get('/', (req, res) => res.redirect('/events'));
 
@@ -69,7 +85,7 @@ router.post(
   (req, res, next) => {
     const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
     if (debug) {
-      try { req.flash('debug', JSON.stringify({ note: 'Incoming POST /manage body snapshot', body: req.body }, null, 2)); } catch (_) {}
+      try { req.flash('debug', JSON.stringify({ note: 'Incoming POST /manage body snapshot', body: redactBody(req.body) }, null, 2)); } catch (_) {}
     }
     next();
   },
@@ -88,7 +104,7 @@ router.post(
       try {
         req.flash('debug', JSON.stringify({
           note: 'Incoming POST /signup body snapshot',
-          body: req.body
+          body: redactBody(req.body)
         }, null, 2));
       } catch (_) {}
     }

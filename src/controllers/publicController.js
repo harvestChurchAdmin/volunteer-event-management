@@ -7,6 +7,20 @@ const publicService = require('../services/publicService');
 const createError = require('http-errors');
 const helpers = require('../views/helpers');
 
+function redactRequestBody(body) {
+    if (!body || typeof body !== 'object') return {};
+    try {
+        const clone = JSON.parse(JSON.stringify(body));
+        ['name', 'email', 'phone', 'phone_number'].forEach((k) => {
+            if (Object.prototype.hasOwnProperty.call(clone, k)) clone[k] = '[redacted]';
+        });
+        if (clone.dish_notes) clone.dish_notes = '[redacted]';
+        return clone;
+    } catch (_) {
+        return {};
+    }
+}
+
 exports.showEventsList = (req, res, next) => {
     try {
         const events = publicService.getPublicEvents();
@@ -71,7 +85,7 @@ exports.handleSignup = async (req, res, next) => {
     // Redirect back to the event page if the eventId is missing (debug-friendly)
     if (!eventId) {
         if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
-          try { req.flash('debug', JSON.stringify({ error: 'Missing eventId', body: req.body }, null, 2)); } catch (_) {}
+          try { req.flash('debug', JSON.stringify({ error: 'Missing eventId', body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
         }
         return res.redirect('/events');
     }
@@ -80,7 +94,7 @@ exports.handleSignup = async (req, res, next) => {
         const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
         req.flash('error', 'You must select at least one time slot.');
         if (debug) {
-          try { req.flash('debug', JSON.stringify({ error: 'No blockIds received', body: req.body }, null, 2)); } catch (_) {}
+          try { req.flash('debug', JSON.stringify({ error: 'No blockIds received', body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
           const evt = publicService.getEventDetailsForPublic(eventId);
           return res.status(400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
         }
@@ -92,7 +106,7 @@ exports.handleSignup = async (req, res, next) => {
         const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
         errs.forEach(error => req.flash('error', error.msg));
         if (debug) {
-          try { req.flash('debug', JSON.stringify({ validationErrors: errs, body: req.body }, null, 2)); } catch (_) {}
+          try { req.flash('debug', JSON.stringify({ validationErrors: errs, body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
         }
 
         const evt = publicService.getEventDetailsForPublic(eventId);
@@ -147,11 +161,11 @@ exports.handleSignup = async (req, res, next) => {
           const debugBlob = {
             eventId,
             blockIds,
-            dish_notes: req.body && req.body.dish_notes ? req.body.dish_notes : undefined,
+            dish_notes: req.body && req.body.dish_notes ? '[redacted]' : undefined,
             status: error.status || undefined,
             code: error.code || undefined,
             message: error.message,
-          };
+            };
           try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
           const evt = publicService.getEventDetailsForPublic(eventId);
           return res.status(error.status || 400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
@@ -206,7 +220,7 @@ exports.updateManageSignup = async (req, res, next) => {
           const debugBlob = {
             token,
             blockIds,
-            dish_notes: req.body && req.body.dish_notes ? req.body.dish_notes : undefined,
+            dish_notes: req.body && req.body.dish_notes ? '[redacted]' : undefined,
             status: error.status || undefined,
             code: error.code || undefined,
             message: error.message,

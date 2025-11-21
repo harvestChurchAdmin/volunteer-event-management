@@ -169,6 +169,7 @@
   <div id="signup-form" class="card card--plain signup-panel" style="display:block;">
     <p class="muted">Select or deselect any selections above, then save. You can also remove all selections to cancel your signup.</p>
     <form id="signupFormTag" action="/manage/<%= token %>" method="POST" novalidate data-mode="manage" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
+      <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
       <div class="card-actions">
         <button type="submit" class="btn btn-primary">Save changes</button>
       </div>

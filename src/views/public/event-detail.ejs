@@ -71,6 +71,7 @@
     </summary>
     <div class="disclosure__panel">
       <form action="/manage/remind" method="POST" class="disclosure__form" novalidate>
+        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
         <input type="hidden" name="eventId" value="<%= event.event_id %>">
         <label class="sr-only" for="remind-email">Email</label>
         <input id="remind-email" class="input-inline" type="email" name="email" placeholder="Enter the email you used to sign up" required>
@@ -225,6 +226,7 @@
     <div id="signup-form" class="card card--plain signup-panel" style="display:none;">
       <p class="muted">Share your contact info so the team can confirm your selection.</p>
       <form id="signupFormTag" action="/signup" method="POST" novalidate data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
+        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
         <input type="hidden" name="eventId" value="<%= event.event_id %>">
         <div class="form-grid two">
           <div class="form-group">

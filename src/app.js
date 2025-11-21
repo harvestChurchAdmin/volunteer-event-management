@@ -7,6 +7,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const session = require('express-session');
 const passport = require('passport');
 const helmet = require('helmet');
@@ -14,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const createError = require('http-errors');
 const flash = require('connect-flash');
 const { getBranding } = require('./config/branding');
+const { SqliteSessionStore } = require('./utils/sqliteSessionStore');
 
 require('./config/passport-setup');
 
@@ -64,10 +66,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret || sessionSecret.length < 24) {
+    throw new Error('SESSION_SECRET must be set to a long, random value (24+ chars).');
+}
+
+const sessionStore = new SqliteSessionStore({
+    dbPath: process.env.SESSION_DB_PATH || path.join(__dirname, '../db/sessions.db')
+});
+
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
+    store: sessionStore,
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
@@ -79,6 +92,30 @@ app.use(session({
 app.use(flash());
 app.use(passport.initialize());
 app.use(passport.session());
+
+// CSRF protection for all state-changing requests using a simple, session-bound token.
+app.use((req, res, next) => {
+    const method = (req.method || 'GET').toUpperCase();
+    if (!req.session) return next(new Error('Session support is required for CSRF protection.'));
+    if (!req.session.csrfToken) {
+        req.session.csrfToken = crypto.randomBytes(24).toString('hex');
+    }
+    res.locals.csrfToken = req.session.csrfToken;
+
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return next();
+
+    const incomingToken = (req.body && req.body._csrf) || req.get('csrf-token') || (req.query && req.query._csrf);
+    if (incomingToken && incomingToken === req.session.csrfToken) {
+        return next();
+    }
+
+    const message = 'Your session expired. Please refresh and try again.';
+    if (req.xhr || req.get('x-requested-with') === 'XMLHttpRequest' || req.accepts('json')) {
+        return res.status(403).json({ ok: false, error: message });
+    }
+    req.flash && req.flash('error', message);
+    return res.status(403).redirect('back');
+});
 
 // Attach branding information to every response so views can render dynamic titles.
 app.use((req, res, next) => {

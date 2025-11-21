@@ -183,8 +183,7 @@ function computeExpiryDate(days = TOKEN_TTL_DAYS) {
  * with different URLs.
  */
 function issueManageToken(volunteerId, eventId) {
-  const existing = dal.public.getTokenForVolunteerEvent(volunteerId, eventId);
-  const token = existing && existing.token ? existing.token : crypto.randomBytes(24).toString('hex');
+  const token = crypto.randomBytes(24).toString('hex');
   const expiresAt = computeExpiryDate();
   dal.public.storeVolunteerToken(token, volunteerId, eventId, expiresAt);
   return token;

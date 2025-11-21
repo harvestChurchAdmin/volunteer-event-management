@@ -21,6 +21,19 @@ exports.showEventsList = (req, res, next) => {
     }
 };
 
+// Volunteer help (public)
+exports.showVolunteerHelp = (req, res, next) => {
+  try {
+    res.render('public/help-volunteers', {
+      title: 'Volunteer Help',
+      helpers
+    });
+  } catch (error) {
+    console.error('--- ERROR IN showVolunteerHelp ---', error);
+    next(error);
+  }
+};
+
 exports.showEventDetail = (req, res, next) => {
     try {
         const eventId = req.params.eventId;

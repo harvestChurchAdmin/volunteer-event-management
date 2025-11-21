@@ -22,6 +22,9 @@ router.get('/login', (req, res) => {
     res.render('login', { title: 'Admin Login', messages: req.flash('error'), googleAuthHref });
 });
 
+// Volunteer-facing help page
+router.get('/help', publicController.showVolunteerHelp);
+
 // List of all upcoming events
 router.get('/events', publicController.showEventsList);
 

@@ -28,6 +28,19 @@ exports.showFormattingHelp = (req, res, next) => {
 };
 
 /**
+ * Render guidance on the recommended admin workflows for schedule and potluck events.
+ */
+exports.showWorkflowHelp = (req, res, next) => {
+  try {
+    res.render('admin/help-workflows', {
+      title: 'Workflow Help',
+      messages: req.flash(),
+      layoutVariant: 'admin'
+    });
+  } catch (e) { next(e); }
+};
+
+/**
  * Display the management screen for a specific event, including stations,
  * blocks, and volunteer assignments.
  */

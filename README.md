@@ -39,6 +39,7 @@ Key settings (see `.env.example` for defaults and documentation):
 | `BRAND_LOGO_URL` | Optional logo displayed in the header (leave blank for text-only). |
 | `BRAND_FAVICON_URL` | Optional favicon image (absolute URL or a path like `/favicon.ico`). See Favicon below. |
 | `BRAND_HOME_PATH` | Path the brand link should point to (defaults to `/`). |
+| `SUPPORT_CONTACT_NAME` / `SUPPORT_CONTACT_EMAIL` / `SUPPORT_CONTACT_PHONE` | Contact info shown in public help pages and emails. |
 | `APP_BASE_URL` | Public origin used for OAuth callbacks and email links. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth credentials for admin login. |
 | `GOOGLE_WORKSPACE_DOMAIN` | Limits admin access to a specific Google Workspace domain. |

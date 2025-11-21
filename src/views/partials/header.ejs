@@ -62,7 +62,28 @@
         <li><a href="/events">Sign-ups</a></li>
         <% if (user) { %>
           <li><a href="/admin/dashboard">Admin Dashboard</a></li>
-          <li><a href="/admin/help/formatting">Formatting Help</a></li>
+          <li class="topbar__help dropdown dropdown--float">
+            <details>
+              <summary class="topbar__help-summary">
+                <span>Help</span>
+                <svg class="topbar__help-caret" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </summary>
+              <div class="topbar__help-menu dropdown__menu">
+                <a class="dropdown__item topbar__help-link" href="/admin/help/formatting">
+                  <span class="dropdown__item-icon" aria-hidden="true">✎</span>
+                  <span class="dropdown__item-label">Formatting guide</span>
+                </a>
+                <a class="dropdown__item topbar__help-link" href="/admin/help/workflows">
+                  <span class="dropdown__item-icon" aria-hidden="true">◎</span>
+                  <span class="dropdown__item-label">Workflow help</span>
+                </a>
+              </div>
+            </details>
+          </li>
+        <% } else { %>
+          <li><a href="/help">Help</a></li>
         <% } %>
       </ul>
     </nav>

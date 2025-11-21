@@ -24,6 +24,9 @@ function getBranding() {
   const brandColor = clean(process.env.BRAND_COLOR) || '';
   const brandStrongColor = clean(process.env.BRAND_COLOR_STRONG) || '';
   const accentColor = clean(process.env.ACCENT_COLOR) || '';
+  const supportContactName = clean(process.env.SUPPORT_CONTACT_NAME) || orgName;
+  const supportContactEmail = clean(process.env.SUPPORT_CONTACT_EMAIL) || '';
+  const supportContactPhone = clean(process.env.SUPPORT_CONTACT_PHONE) || '';
 
   return {
     appName,
@@ -36,6 +39,9 @@ function getBranding() {
     brandColor,
     brandStrongColor,
     accentColor,
+    supportContactName,
+    supportContactEmail,
+    supportContactPhone,
   };
 }
 

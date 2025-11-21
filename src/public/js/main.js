@@ -90,6 +90,25 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[AccountMenu] Failed to wire outside/esc close:', err);
   }
 
+  // Help dropdown (header) — close when clicking outside or pressing Esc
+  try {
+    const closeHelpMenus = () => {
+      document.querySelectorAll('.topbar__help details[open]').forEach(d => d.removeAttribute('open'));
+    };
+
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('.topbar__help details[open]').forEach(d => {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeHelpMenus();
+    });
+  } catch (err) {
+    console.error('[HelpMenu] Failed to wire outside/esc close:', err);
+  }
+
   // Print helpers (CSP-safe; no inline handlers)
   try {
     const params = new URLSearchParams(location.search || '');

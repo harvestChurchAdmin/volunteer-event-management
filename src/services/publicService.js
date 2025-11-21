@@ -4,6 +4,7 @@ const createError = require('http-errors');
 const dal = require('../db/dal');
 const { fmt12 } = require('../views/helpers');
 const { sendMail } = require('../utils/mailer');
+const { getBranding } = require('../config/branding');
 
 /**
  * Base external URL used when issuing management links in transactional email.
@@ -196,6 +197,11 @@ function issueManageToken(volunteerId, eventId) {
 async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl, isUpdate }) {
   if (!volunteer.email) return;
 
+  const branding = getBranding();
+  const supportName = branding.supportContactName || branding.orgName || 'Our team';
+  const supportEmail = branding.supportContactEmail;
+  const supportPhone = branding.supportContactPhone;
+
   const isPotluckEmail = String(event && event.signup_mode || '').toLowerCase() === 'potluck';
   const subject = isPotluckEmail
     ? (isUpdate ? `Updated potluck signup for ${event.name}` : `Your potluck signup for ${event.name}`)
@@ -221,10 +227,16 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
       lines.push('Here is your schedule:');
     }
     lines.push(listItems, '', `Need to make a change? Manage your signup here: ${manageUrl}`, '',
-      'If you have any questions or run into trouble, reach out to us:',
-      'Email: admin@harvestchurch.ca', 'Phone: 2503902152', '', 'With gratitude,',
-      'Harvest Church Volunteer Team', '', 'If you did not request this email you can ignore it.'
-    );
+      'If you have any questions or run into trouble, reach out to us:');
+    const contactLines = [];
+    if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
+    if (supportPhone) contactLines.push(`Phone: ${supportPhone}`);
+    if (contactLines.length) {
+      lines.push(...contactLines);
+    } else {
+      lines.push('Reply to this email and we will help you.');
+    }
+    lines.push('', 'With gratitude,', supportName || 'Volunteer Team', '', 'If you did not request this email you can ignore it.');
     return lines;
   })();
 
@@ -322,11 +334,15 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
                         <tr>
                           <td style="font-family:'Segoe UI', Arial, sans-serif;">
                             <p style="margin:0 0 12px; font-weight:600; color:#0f172a;">Need a hand?</p>
-                            <p style="margin:0; color:#475569; line-height:1.7;">Our team is here to help with any changes or questions. Reach out at <a href="mailto:admin@harvestchurch.ca" style="color:#2563eb; font-weight:600;">admin@harvestchurch.ca</a> or call <a href="tel:12503902152" style="color:#2563eb; font-weight:600;">2503902152</a>.</p>
+                            <p style="margin:0; color:#475569; line-height:1.7;">Our team is here to help with any changes or questions. ${
+                              supportEmail || supportPhone
+                                ? `Reach out${supportEmail ? ' at <a href="mailto:${supportEmail}" style="color:#2563eb; font-weight:600;">${supportEmail}</a>' : ''}${supportPhone ? (supportEmail ? ' or call ' : ' at ') + '<a href="tel:' + supportPhone.replace(/\\D+/g, '') + '" style="color:#2563eb; font-weight:600;">' + supportPhone + '</a>' : ''}.`
+                                : 'Reply to this email and we will help you.'
+                            }</p>
                           </td>
                         </tr>
                       </table>
-                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>Harvest Church Volunteer Team</strong></p>
+                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${supportName || 'Volunteer Team'}</strong></p>
                     </td>
                   </tr>
                   <tr>

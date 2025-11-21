@@ -50,6 +50,14 @@
     <% } else { %>
       <p class="muted"><%= isPotluck ? 'Select a category and item to bring.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
     <% } %>
+    <%
+      const brandInfo = locals.brand || {};
+      const supportEmail = brandInfo.supportContactEmail || '';
+      const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team';
+    %>
+    <p class="muted small">
+      Need instructions? <a href="/help">Open the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>. If you are stuck, reply to your confirmation email.<% } %>
+    </p>
   </article>
 </section>
 

@@ -859,12 +859,39 @@
         });
       }
 
+      function sortStationsByTime(list) {
+        if (!list) return;
+        const items = Array.from(list.querySelectorAll('[data-station-id]'));
+        if (!items.length) return;
+        const sorted = items.slice().sort((a, b) => {
+          const aTs = Number(a.getAttribute('data-start-ts'));
+          const bTs = Number(b.getAttribute('data-start-ts'));
+          const aHasTime = Number.isFinite(aTs);
+          const bHasTime = Number.isFinite(bTs);
+          if (aHasTime && bHasTime && aTs !== bTs) return aTs - bTs;
+          if (aHasTime !== bHasTime) return aHasTime ? -1 : 1;
+          const aName = (a.querySelector('.item-reorder-name') || {}).textContent || '';
+          const bName = (b.querySelector('.item-reorder-name') || {}).textContent || '';
+          return aName.localeCompare(bName);
+        });
+        sorted.forEach(el => list.appendChild(el));
+        persistStationOrder(list);
+      }
+
       // Main grid list
       const grid = qs('.js-station-list');
       if (grid) makeStationListDraggable(grid);
 
       // Modal list
       qsa('.station-reorder-list').forEach(makeStationListDraggable);
+
+      qsa('.js-sort-stations-by-time').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const modal = btn.closest('.modal');
+          const list = modal ? modal.querySelector('.station-reorder-list') : qs('.station-reorder-list');
+          sortStationsByTime(list);
+        });
+      });
     })();
 
     // Drag & drop ordering for items within stations (potluck only) ----------

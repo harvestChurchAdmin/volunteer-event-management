@@ -543,15 +543,14 @@ const slotPercent = slotTotals.capacity > 0
             <div class="form-group">
               <label for="station-about-<%= station.station_id %>"><%= isPotluck ? 'Category description' : 'Station description' %></label>
               <textarea id="station-about-<%= station.station_id %>" name="about" rows="3" placeholder="Describe the purpose of this station"><%= station.about || station.description || '' %></textarea>
-              <p class="muted small">Supports simple formatting: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet list</code>, blank line for new paragraph. <a href="/admin/help/formatting">Formatting help</a></p>
             </div>
             <% if (!isPotluck) { %>
               <div class="form-group">
                 <label for="station-duties-<%= station.station_id %>">Volunteer duties</label>
                 <textarea id="station-duties-<%= station.station_id %>" name="duties" rows="3" placeholder="List expectations or tasks for volunteers"><%= station.duties || '' %></textarea>
-                <p class="muted small">Supports simple formatting: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet list</code>, blank line for new paragraph. <a href="/admin/help/formatting">Formatting help</a></p>
               </div>
             <% } %>
+            <%- include('../partials/formatting-help-inline') %>
           </form>
         <%- include('../partials/modal-end', { id: 'editStationModal-' + station.station_id, formId: 'editStationForm-' + station.station_id }) %>
 
@@ -578,16 +577,37 @@ const slotPercent = slotTotals.capacity > 0
     <%- include('../partials/modal-start', { id: 'reorderStationsModal', title: isPotluck ? 'Reorder Categories' : 'Reorder Stations' }) %>
       <div class="form-group">
         <p class="muted">Drag <%= isPotluck ? 'categories' : 'stations' %> up or down to change the order they appear on the event.</p>
+        <% if (!isPotluck) { %>
+          <button type="button" class="btn btn-ghost btn-small js-sort-stations-by-time">
+            Sort by date & time
+          </button>
+        <% } %>
       </div>
       <ul class="item-reorder-list station-reorder-list" data-event-id="<%= event.event_id %>">
-        <% stations.forEach(function(station) { %>
-          <li class="item-reorder-row station-reorder-row" data-station-id="<%= station.station_id %>">
+        <% stations.forEach(function(station) {
+             const blockTimes = Array.isArray(station.time_blocks) ? station.time_blocks : [];
+             const earliestTs = blockTimes.reduce((min, block) => {
+               const ts = toTimestamp(block && block.start_time);
+               if (!Number.isFinite(ts)) return min;
+               return min === null ? ts : Math.min(min, ts);
+             }, null);
+        %>
+          <li class="item-reorder-row station-reorder-row"
+              data-station-id="<%= station.station_id %>"
+              data-start-ts="<%= earliestTs === null ? '' : earliestTs %>">
             <span class="drag-handle" aria-hidden="true" title="Drag to reorder">☰</span>
             <span class="item-reorder-name"><%= station.name %></span>
           </li>
         <% }) %>
       </ul>
-    <%- include('../partials/modal-end', { id: 'reorderStationsModal', formId: undefined }) %>
+    <%- include('../partials/modal-end', {
+      id: 'reorderStationsModal',
+      formId: undefined,
+      footer: `
+        <button class="btn btn-secondary" data-close="#reorderStationsModal">Cancel</button>
+        <button class="btn btn-primary" data-close="#reorderStationsModal">OK</button>
+      `
+    }) %>
   <% } else { %>
     <article class="card card--plain empty-state">
       <h2>No stations yet</h2>
@@ -606,7 +626,7 @@ const slotPercent = slotTotals.capacity > 0
     <div class="form-group">
       <label for="edit-event-description">Description</label>
       <textarea id="edit-event-description" name="description"><%= event.description %></textarea>
-      <p class="muted small">Supports simple formatting: <code>**bold**</code>, <code>*italic*</code>, <code>- bullet list</code>, blank line for new paragraph. <a href="/admin/help/formatting">Formatting help</a></p>
+      <%- include('../partials/formatting-help-inline') %>
     </div>
         <div class="form-grid two">
           <div class="form-group">
@@ -667,6 +687,7 @@ const slotPercent = slotTotals.capacity > 0
         <textarea id="new-station-duties" name="duties" placeholder="Example: Welcome guests, hand out info cards" rows="3"></textarea>
       </div>
     <% } %>
+    <%- include('../partials/formatting-help-inline') %>
     <% if (stations.length > 0) { %>
       <div class="form-group">
         <label for="station-copy-source">Copy existing station (optional)</label>

@@ -4,6 +4,14 @@
   <div>
     <h1>Upcoming Sign-ups</h1>
     <p class="page-subtitle">Find a time that works for you and sign up quickly.</p>
+    <%
+      const brandInfo = locals.brand || {};
+      const supportEmail = brandInfo.supportContactEmail || '';
+      const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team';
+    %>
+    <p class="muted small">
+      New here? <a href="/help">Read the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } %>.
+    </p>
   </div>
 </section>
 

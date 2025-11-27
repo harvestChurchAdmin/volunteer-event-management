@@ -85,25 +85,40 @@ exports.exportEventCsv = (req, res, next) => {
     if (!payload || !payload.event) return next(new Error('Event not found'));
 
     const { event, rows } = payload;
+    const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
     const filenameSafe = String(event.name || 'event').replace(/[^A-Za-z0-9._-]+/g, '_');
     const filename = `${filenameSafe}_${event.event_id}.csv`;
 
     // CSV header
-    const headers = [
-      'Event',
-      'Event Start',
-      'Event End',
-      'Station',
-      'Item Title',
-      'Feeds',
-      'Block Start',
-      'Block End',
-      'Volunteer Name',
-      'Volunteer Email',
-      'Volunteer Phone',
-      'Reservation Date',
-      'Dish Name'
-    ];
+    const headers = isPotluck
+      ? [
+          'Event',
+          'Event Start',
+          'Event End',
+          'Station',
+          'Item Title',
+          'Feeds',
+          'Volunteer Name',
+          'Volunteer Email',
+          'Volunteer Phone',
+          'Reservation Date',
+          'Dish Name'
+        ]
+      : [
+          'Event',
+          'Event Start',
+          'Event End',
+          'Station',
+          'Item Title',
+          'Feeds',
+          'Block Start',
+          'Block End',
+          'Volunteer Name',
+          'Volunteer Email',
+          'Volunteer Phone',
+          'Reservation Date',
+          'Dish Name'
+        ];
 
     function csvEscapeSafe(v) {
       let s = v == null ? '' : String(v);
@@ -117,21 +132,31 @@ exports.exportEventCsv = (req, res, next) => {
     const lines = [];
     lines.push(headers.map(csvEscapeSafe).join(','));
     rows.forEach(r => {
-      lines.push([
+      const base = [
         event.name,
         event.date_start,
         event.date_end,
         r.station_name || r.station,
         r.block_title || '',
-        r.servings || '',
-        r.block_start,
-        r.block_end,
+        r.servings || ''
+      ];
+
+      const tail = [
         r.volunteer_name,
         r.volunteer_email,
         r.volunteer_phone,
         r.reservation_date,
         r.reservation_note || ''
-      ].map(csvEscapeSafe).join(','));
+      ];
+
+      const line = isPotluck
+        ? base.concat(tail)
+        : base.concat([
+            r.block_start,
+            r.block_end
+          ], tail);
+
+      lines.push(line.map(csvEscapeSafe).join(','));
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -206,8 +231,9 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
     const DEFAULT_FIELDS = (String(event.signup_mode || '') === 'potluck')
       ? [
           'event_name', 'event_start', 'event_end',
-          'station_name', 'item_title', 'block_start', 'block_end',
+          'station_name', 'item_title',
           'volunteer_name', 'volunteer_email', 'volunteer_phone',
+          'dish_name',
           'reservation_date'
         ]
       : [
@@ -407,8 +433,8 @@ exports.updateTimeBlock = (req, res, next) => {
 exports.addReservation = (req, res, next) => {
   try {
     const { blockId } = req.params;
-    const { eventId, name, email, phone } = req.body;
-    adminService.addReservationToBlock(blockId, { name, email, phone });
+    const { eventId, name, email, phone, dish_note } = req.body;
+    adminService.addReservationToBlock(blockId, { name, email, phone, dish_note });
     req.flash('success', 'Volunteer added to time block.');
     res.redirect(`/admin/event/${eventId}`);
   } catch (e) {

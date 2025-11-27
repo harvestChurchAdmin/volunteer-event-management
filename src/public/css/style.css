@@ -122,7 +122,7 @@ body.app-shell {
 
 .app-main {
   flex: 1;
-  padding: clamp(2.5rem, 6vw, 4rem) 0 clamp(4rem, 8vw, 5.5rem);
+  padding: clamp(1.5rem, 4vw, 3rem) 0 clamp(3rem, 7vw, 5rem);
 }
 
 .page-shell {
@@ -426,13 +426,6 @@ details.dropdown[open] > summary { opacity: 0.9; }
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-bottom: 6px solid var(--surface);
-}
-.dropdown-up .dropdown__menu { top: auto; bottom: calc(100% + 6px); }
-.dropdown-up .dropdown__menu::after {
-  top: auto;
-  bottom: -6px;
-  border-bottom: none;
-  border-top: 6px solid var(--surface);
 }
 .dropdown__item {
   display: block;
@@ -806,18 +799,6 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
 .account-menu__link:hover {
   color: var(--brand-strong);
-}
-
-.topbar__account {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.85rem;
-  color: var(--text-soft);
-}
-
-.topbar__account-name strong {
-  color: var(--text-strong);
 }
 
 .topbar__toggle {
@@ -1292,26 +1273,8 @@ details.dropdown[open] > summary { opacity: 0.9; }
   .selected-slot__note input[type="text"] { max-width: 420px; }
 }
 
-/* Gentle highlight to draw attention after first selection */
-.signup-panel--pulse {
-  animation: signupPanelPulse 1400ms ease-in-out 1;
-}
-
-@keyframes signupPanelPulse {
-  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.00); }
-  20% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.18); }
-  60% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.12); }
-  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.00); }
-}
-
 /* Step indicator ---------------------------------------------------------- */
 /* deprecated: old inline step indicator removed */
-
-.station-card__meta {
-  margin: 0.35rem 0 0;
-  color: var(--text-soft);
-  max-width: 48ch;
-}
 
 .station-card {
   display: flex;
@@ -1866,10 +1829,6 @@ details.dropdown[open] > summary { opacity: 0.9; }
   color: #991b1b;
 }
 
-.help-card a {
-  font-weight: 600;
-}
-
 .notice--success {
   background: #ecfdf5;
   border-color: rgba(5, 150, 105, 0.18);
@@ -1880,13 +1839,6 @@ details.dropdown[open] > summary { opacity: 0.9; }
   background: #eff6ff;
   border-color: rgba(37, 99, 235, 0.2);
   color: var(--brand-strong);
-}
-
-/* High-visibility warning notice for admin-only preview bars */
-.notice--warning {
-  background: #fffbeb; /* amber-50 */
-  border-color: rgba(217, 119, 6, 0.28); /* amber-600 at low alpha */
-  color: #92400e; /* amber-800 for readable text */
 }
 
 .notice__title {
@@ -1918,33 +1870,6 @@ details.dropdown[open] > summary { opacity: 0.9; }
   background: rgba(220, 38, 38, 0.16);
   color: #b91c1c;
   border: 1px solid rgba(220, 38, 38, 0.28);
-}
-
-/* Event type pills */
-.type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.38rem;
-  padding: 0.3rem 0.65rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1;
-  border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: #fff;
-  vertical-align: middle;
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
-}
-.type-badge svg { width: 16px; height: 16px; display: block; }
-.type-badge--schedule {
-  background: rgba(29, 78, 216, 0.06);
-  color: #1d4ed8;
-  border-color: rgba(29, 78, 216, 0.22);
-}
-.type-badge--potluck {
-  background: rgba(4, 120, 87, 0.08);
-  color: #047857;
-  border-color: rgba(4, 120, 87, 0.22);
 }
 
 .toolbar {
@@ -2157,7 +2082,7 @@ details.dropdown[open] > summary { opacity: 0.9; }
 .time-block-item.selected {
   border-color: rgba(37, 99, 235, 0.85);
   box-shadow: 0 22px 36px rgba(37, 99, 235, 0.28);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.96), rgba(59, 130, 246, 0.9));
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(59, 130, 246, 0.84));
   color: #fff;
 }
 
@@ -2165,6 +2090,14 @@ details.dropdown[open] > summary { opacity: 0.9; }
 .time-block-item.selected span,
 .time-block-item.selected .muted {
   color: rgba(255, 255, 255, 0.95);
+}
+.time-block-item.selected .dish-notes-inline .info-icon,
+.time-block-item.selected .dish-notes-inline strong {
+  color: rgba(255, 255, 255, 0.95);
+}
+.time-block-item.selected .dish-notes-list,
+.time-block-item.selected .dish-notes-list li {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .time-block-item.selected .btn {
@@ -2453,32 +2386,14 @@ details.dropdown[open] > summary { opacity: 0.9; }
 .dish-notes-inline { display: inline-flex; align-items: center; gap: 0.4rem; }
 .dish-notes-inline .info-icon { width: 16px; height: 16px; color: var(--brand-strong); flex: 0 0 auto; cursor: help; }
 .dish-notes-inline[title] { cursor: help; }
-
-/* Potluck dish notes as list under item */
-.time-block-item__notes { margin-top: 6px; overflow-x: hidden; }
-.time-block-item__others .dish-notes-list { margin-top: 4px; }
-.dish-notes-list { margin: 4px 0 0; padding-left: 1.15rem; color: var(--text-muted); }
+.dish-notes-list {
+  margin: 4px 0 0;
+  padding-left: 1.15rem;
+  color: var(--text-muted);
+}
 .dish-notes-list li { margin: 0.1rem 0; }
 
-/* Improve contrast when a card is selected (blue background) */
-.time-block-item.selected .dish-notes-inline .info-icon { color: rgba(255,255,255,0.98); }
-.time-block-item.selected .dish-notes-list { color: rgba(255,255,255,0.92); }
-.time-block-item.selected .dish-notes-list li { color: rgba(255,255,255,0.92); }
-
-/* Collapsible card (e.g., manage reminder) -------------------------------- */
-.collapsible-card { padding: 0 !important; }
-.collapsible-card__summary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.9rem 1.25rem;
-  cursor: pointer;
-  list-style: none;
-}
-.collapsible-card__summary::-webkit-details-marker { display: none; }
-.collapsible-card[open] .collapsible-card__summary { border-bottom: 1px solid var(--border-soft); }
-.collapsible-card__body { padding: 1rem 1.25rem 1.25rem; }
-
+/* Potluck dish notes as list under item */
 /* Inline disclosure link (top reminder) ---------------------------------- */
 .disclosure { padding: 0; margin: 0; }
 .disclosure__summary {
@@ -3148,11 +3063,6 @@ textarea {
   margin: 0 0 0.4rem;
 }
 
-.site-footer__tagline {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.65);
-}
-
 .site-footer__links {
   display: flex;
   gap: 1.25rem;
@@ -3310,10 +3220,6 @@ textarea {
   height: 0.9rem;
 }
   
-.selected-slots__grid-header {
-  display: none; /* replaced by per-row labels for better responsiveness */
-}
-.selected-slots__grid-header div:nth-child(3){ text-align: right; }
 .selected-slot__note .input-error {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);

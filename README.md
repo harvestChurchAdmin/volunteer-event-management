@@ -8,7 +8,7 @@ Express + SQLite tooling for scheduling volunteers at church or community events
 - **SQLite** persistence through a thin Data Access Layer (`src/db/dal.js`).
 - **Modular architecture**: controllers defer to services, services to the DAL.
 - **Server-side rendered UI** using EJS templates with lightweight client scripts.
-- **Two sign-up modes**: schedule (stations + time blocks) and potluck (categories + items with required dish names).
+- **Two sign-up modes**: schedule (stations + time blocks) and potluck (categories + items with required dish names and “Others bringing” guidance).
 - **Email notifications** powered by configurable SMTP or Gmail service accounts.
 
 ## Getting Started
@@ -80,21 +80,24 @@ You can swap `MAIL_SERVICE` for direct SMTP settings (`MAIL_HOST`, `MAIL_PORT`, 
 2. **Stations / Categories** – For each event define stations (schedule mode) or potluck categories (potluck mode).
 3. **Time Blocks / Items** – Add time blocks with start/end times and capacity targets, or potluck items with optional “feeds” ranges.
 4. **Reservations** – Add volunteers directly or review sign-ups, edit/move/remove as needed.
-5. **Publish** – Toggle visibility to push an event live on the volunteer sign-up page. A “View public page” link opens the public event and preserves a `return` link back to the admin screen.
+5. **Publish** – Toggle visibility to push an event live on the volunteer sign-up page. The publish widget now shows an inline “Copy link” action so admins can grab the private/public URL without opening a modal.
 
 Drag-and-drop ordering plus local storage persists station layout preferences for each admin. Modals are CSP compatible and keyboard accessible. The admin dashboard table also supports client-side sorting by name, dates, and status for quick scanning.
 
+### Publish states
+
+- **Draft** – Admins only. The event is hidden from /events and from search. Use this while editing or collecting details; volunteers can’t view it even with a direct link.
+- **Private** – Not listed on /events, but anyone with the shareable link can access it. Great for soft launches or targeted outreach.
+- **Public** – Listed on /events and reachable via the shareable link. Switch back to Private/Draft anytime; stations, sign-ups, and dish notes remain intact.
+
 ## Testing & Quality
 
-- Run `npm test` for smoke coverage of the volunteer picker flow.
-- Critical logic in services and the DAL now carries inline documentation comments to make future enhancements safer.
+- Run `npm test` for smoke coverage of the volunteer picker flow. This suite combines fast JS‑DOM tests (services/helpers) and a Puppeteer smoke that clicks through `src/public/test-picker.html` to exercise the datetime picker and modal behaviours in a real browser context.
+- `helpers.test.js` provides regression coverage for the shared rendering helpers.
+- `potluck-jsdom.test.js` validates the potluck selection flow: a “Select” click requires dish names and produces the hidden inputs posted back to the server.
+- `picker-smoke.test.js` uses the lightweight `/test-picker.html` harness to confirm the modal, datetime fields, and close behaviours remain accessible.
+- Critical logic in services and the DAL carries inline documentation comments to make future enhancements safer; prefer targeting those layers in new unit tests.
 - When adding features, prefer unit testing services and integration testing controllers/routes.
-
-### New tests
-
-- `test/potluck-jsdom.test.js` – JS‑DOM scenario that simulates selecting an item on a potluck event and asserts:
-  - A required dish input is rendered
-  - Hidden `blockIds[]` inputs are produced for form submission
 
 ## Deployment Checklist
 
@@ -122,10 +125,10 @@ Tune the UI via environment variables (no code edits required):
 
 ## Potluck specifics
 
-- Items have a required “Dish name” input for every selection.
-- “Others bringing” shows dish names plus first name + last initial of the contributor.
+- Items use a “Select” button and always require a “Dish name” entry for every reservation.
+- “Others bringing” shows dish names plus first name + last initial of the contributor; the list truncates to keep cards compact and shows “+N more” when needed.
 - Cards keep a fixed left column for the item name and an aligned right column for “Others bringing”.
- - Dish names are normalized on save (trimming whitespace and stripping accidental leading commas), so items like `, Lasagna` are stored and displayed as `Lasagna`.
+- Dish names are normalized on save (trimming whitespace and stripping accidental leading commas), so items like `, Lasagna` are stored and displayed as `Lasagna`.
 
 ## Contributing / GitHub
 
@@ -140,7 +143,6 @@ This repository is ready for GitHub. Include the following when opening PRs:
 
 - Admin JS is lazy‑loaded on public pages (no `/js/admin-event-detail.js` unless on admin layout).
 - Client debugging logs in `/js/main.js` are gated behind a small `DEBUG` flag (set to `false` by default). Flip it locally if you need extra console output.
-- An optional admin‑only stylesheet (`/css/admin.css`) exists but is not currently loaded by default to preserve the known‑good admin visuals. If you want to experiment with splitting CSS, you can enable it by linking it in `src/views/partials/header.ejs` and moving admin‑specific rules from `style.css` into `admin.css` incrementally while visually verifying.
 
 ## Contributing
 

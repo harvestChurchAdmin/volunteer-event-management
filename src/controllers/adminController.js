@@ -49,12 +49,21 @@ exports.showEventDetail = (req, res, next) => {
     const event = adminService.getEventDetailsForAdmin(req.params.eventId);
     if (!event) return next(new Error('Event not found'));
     const helpers = require('../views/helpers');
+    let shareUrl;
+    try {
+      const origin = `${req.protocol}://${req.get('host')}`;
+      shareUrl = new URL(`/events/${event.event_id}`, origin).toString();
+    } catch (err) {
+      shareUrl = `/events/${event.event_id}`;
+    }
+
     res.render('admin/event-detail', {
       title: `Manage Event`,
       event,
       helpers,
       messages: req.flash(),
-      layoutVariant: 'admin'
+      layoutVariant: 'admin',
+      shareUrl
     });
   } catch (e) { next(e); }
 };
@@ -466,9 +475,16 @@ exports.updateEvent = (req, res, next) => {
 exports.setPublish = (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const publish = req.body.publish === '1';
-    adminService.setEventPublish(eventId, publish);
-    req.flash('success', publish ? 'Event published.' : 'Event unpublished.');
+    const rawState = req.body.publish_state || req.body.state;
+    const fallbackToggle = req.body.publish === '1' ? 'published' : 'draft';
+    const targetState = (rawState ? String(rawState) : fallbackToggle).toLowerCase();
+    const appliedState = adminService.setEventPublish(eventId, targetState);
+    const message = appliedState === 'published'
+      ? 'Event published to the public list.'
+      : appliedState === 'private'
+        ? 'Event is live via private link only.'
+        : 'Event unpublished.';
+    req.flash('success', message);
     let redirectTo = req.body.redirectTo;
 
     if (!redirectTo) {

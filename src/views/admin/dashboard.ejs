@@ -5,7 +5,7 @@
     <h1>Admin Dashboard</h1>
     <p class="page-subtitle">Organize events, stations, and time blocks in one streamlined space.</p>
   </div>
-  <div class="page-header__actions">
+  <div class="page-header__actions page-header__actions--flush-right">
     <button id="newEventBtn" class="btn btn-primary" data-open="#newEventModal">Create new event</button>
   </div>
 </section>
@@ -87,10 +87,15 @@
               <%
                 const endDate = new Date(event.date_end);
                 const isPast = endDate && !Number.isNaN(endDate.getTime()) && endDate < now;
-                const statusText = event.is_published ? 'Published' : 'Draft';
-                const sortStatus = (isPast ? 'past_' : 'upcoming_') + (event.is_published ? 'published' : 'draft');
+                const publishState = String(event.publish_state || (event.is_published ? 'published' : 'draft'));
+                const isDraft = publishState === 'draft';
+                const isPrivate = publishState === 'private';
+                const isPublic = publishState === 'published';
+                const statusText = isPublic ? 'Published' : (isPrivate ? 'Private link' : 'Draft');
+                const sortStatus = (isPast ? 'past_' : 'upcoming_') + publishState;
+                const sharePath = '/events/' + event.event_id;
               %>
-              <tr class="event-row <%= event.is_published ? 'event-row--published' : 'event-row--draft' %> <%= isPast ? 'event-row--past' : '' %>"
+              <tr class="event-row <%= 'event-row--' + publishState %> <%= isPast ? 'event-row--past' : '' %>"
                   data-event-id="<%= event.event_id %>"
                   data-sort-name="<%= (event.name || '').toLowerCase() %>"
                   data-sort-date="<%= event.date_start %>"
@@ -128,7 +133,7 @@
                   <%= new Date(event.date_end).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
                 </td>
                 <td data-th="Status">
-                  <span class="status-pill <%= event.is_published ? 'status-pill--live' : 'status-pill--draft' %>">
+                  <span class="status-pill <%= isPublic ? 'status-pill--live' : (isPrivate ? 'status-pill--private' : 'status-pill--draft') %>">
                     <%= statusText %>
                   </span>
                 </td>
@@ -142,19 +147,37 @@
                         Edit event…
                       </a>
                       <a class="dropdown__link"
-                         href="<%= event.is_published
-                           ? ('/events/' + event.event_id + '?return=' + encodeURIComponent('/admin/dashboard'))
-                           : ('/events/' + event.event_id + '?preview=1&return=' + encodeURIComponent('/admin/dashboard')) %>">
+                         href="<%= isDraft
+                           ? (sharePath + '?preview=1&return=' + encodeURIComponent('/admin/dashboard'))
+                           : (sharePath + '?return=' + encodeURIComponent('/admin/dashboard')) %>">
                         <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm1 4h-2v4h4v-2h-2V8Z"/></svg>
-                        <%= event.is_published ? 'View public page' : 'Preview public page' %>
+                        <%= isDraft ? 'Preview public page' : (isPrivate ? 'Open private link' : 'View public page') %>
                       </a>
                       <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
                         <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                        <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
+                        <input type="hidden" name="publish_state" value="published">
                         <input type="hidden" name="redirectTo" value="/admin/dashboard">
                         <button type="submit" class="dropdown__link">
                           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 12h14v2H5v-2Zm0-7h14v2H5V5Zm0 14h14v2H5v-2Z"/></svg>
-                          <%= event.is_published ? 'Unpublish' : 'Publish' %>
+                          Publish to Upcoming Sign-ups
+                        </button>
+                      </form>
+                      <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
+                        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+                        <input type="hidden" name="publish_state" value="private">
+                        <input type="hidden" name="redirectTo" value="/admin/dashboard">
+                        <button type="submit" class="dropdown__link">
+                          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5 3 9v6l9 4.5 9-4.5V9L12 4.5Zm0 2.236 6.5 3.25-6.5 3.25-6.5-3.25L12 6.736Zm-7 6.028 6 3v2.36l-6-3V12.764Zm14 2.332-6 3v-2.36l6-3v2.36Z"/></svg>
+                          Make private link
+                        </button>
+                      </form>
+                      <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
+                        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+                        <input type="hidden" name="publish_state" value="draft">
+                        <input type="hidden" name="redirectTo" value="/admin/dashboard">
+                        <button type="submit" class="dropdown__link">
+                          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 12h14v2H5v-2Zm0-7h14v2H5V5Zm0 14h14v2H5v-2Z"/></svg>
+                          Unpublish
                         </button>
                       </form>
                       <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">

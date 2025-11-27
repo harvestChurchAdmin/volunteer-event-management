@@ -343,10 +343,19 @@ const admin = {
   },
 
   // Toggle whether an event is visible to the public sign-up page.
-  setEventPublish: (eventId, isPublished) => {
+  setEventPublish: (eventId, state) => {
     try {
+      const normalized = String(state);
+      let publishState = 'draft';
+      if (normalized === 'private') publishState = 'private';
+      else if (normalized === 'published' || normalized === 'public' || state === true || state === 1 || state === '1') {
+        publishState = 'published';
+      } else if (state === false || state === 0 || state === '0') {
+        publishState = 'draft';
+      }
+      const isPublished = publishState !== 'draft' ? 1 : 0;
       const res = db.prepare(`UPDATE events SET is_published = ?, publish_state = ? WHERE event_id = ?`)
-        .run(isPublished ? 1 : 0, isPublished ? 'published' : 'draft', eventId);
+        .run(isPublished, publishState, eventId);
       return mapRun(res);
     } catch (e) {
       throw createError(500, 'DB error setting publish: ' + e.message);
@@ -546,7 +555,7 @@ const publicDal = {
         GROUP BY block_id
       ) rn ON rn.block_id = tb.block_id
       WHERE e.event_id = ?
-        AND COALESCE(e.publish_state, CASE WHEN COALESCE(e.is_published,0)=1 THEN 'published' ELSE 'draft' END) = 'published'
+        AND COALESCE(e.publish_state, CASE WHEN COALESCE(e.is_published,0)=1 THEN 'published' ELSE 'draft' END) IN ('published', 'private')
       ORDER BY
         COALESCE(s.station_order, 0),
         CASE

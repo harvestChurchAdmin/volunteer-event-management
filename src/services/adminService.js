@@ -96,14 +96,19 @@ function getEventDetailsForAdmin(eventId) {
     });
   });
 
+  const rawState = rows[0].publish_state || (rows[0].is_published ? 'published' : 'draft');
+  const publishState = (rawState === 'private' || rawState === 'published') ? rawState : 'draft';
+  const isPrivate = publishState === 'private';
+  const isPublishedLive = publishState === 'published';
   const event = {
     event_id: rows[0].event_id,
     name: rows[0].name,
     description: rows[0].description,
     date_start: rows[0].date_start, // already local text
     date_end: rows[0].date_end,     // already local text
-    is_published: !!rows[0].is_published,
-    publish_state: rows[0].publish_state || (rows[0].is_published ? 'published' : 'draft'),
+    is_published: publishState !== 'draft', // kept for legacy callers; true for private + public
+    is_private: isPrivate,
+    publish_state: publishState,
     signup_mode: rows[0].signup_mode || 'schedule',
     stations: []
   };
@@ -330,9 +335,18 @@ function updateEvent(eventId, data) {
  * Toggle the publish state of an event so it shows up (or disappears) from the
  * public signup experience.
  */
-function setEventPublish(eventId, isPublished) {
+function setEventPublish(eventId, state) {
   if (!eventId) throw createError(400, 'Event ID required.');
-  return dal.admin.setEventPublish(eventId, !!isPublished);
+  const normalized = String(state || '').toLowerCase();
+  const publishState =
+    normalized === 'private' ? 'private'
+    : normalized === 'published' || normalized === 'public' ? 'published'
+    : normalized === 'draft' ? 'draft'
+    : (state === true || state === 1 || state === '1') ? 'published'
+    : (state === false || state === 0 || state === '0') ? 'draft'
+    : 'draft';
+  dal.admin.setEventPublish(eventId, publishState);
+  return publishState;
 }
 
 

@@ -76,6 +76,40 @@
   }
 
   /**
+   * Copy text to the user's clipboard, falling back to a hidden textarea on
+   * browsers without asynchronous clipboard support.
+   */
+  function fallbackCopyText(text) {
+    return new Promise(function(resolve, reject) {
+      try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.setAttribute('readonly', '');
+        el.style.position = 'fixed';
+        el.style.top = '-1000px';
+        el.style.left = '-1000px';
+        document.body.appendChild(el);
+        el.select();
+        el.setSelectionRange(0, el.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        if (ok) resolve();
+        else reject(new Error('Copy command failed'));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  function copyTextToClipboard(text) {
+    if (!text) return Promise.reject(new Error('Nothing to copy'));
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      return navigator.clipboard.writeText(text).catch(function() { return fallbackCopyText(text); });
+    }
+    return fallbackCopyText(text);
+  }
+
+  /**
    * Ensure the requested station card is in view and briefly highlighted without
    * mutating its collapsed/expanded state.
    */
@@ -838,6 +872,44 @@
         });
       });
     });
+
+    // Share link copy helper -------------------------------------------------
+    (function initShareLinkCopy() {
+      const buttons = qsa('[data-copy-share-link]');
+      if (!buttons.length) return;
+
+      buttons.forEach(function(btn) {
+        const defaultLabel = btn.getAttribute('data-label-default') || 'Copy link';
+        const successLabel = btn.getAttribute('data-label-success') || 'Copied!';
+        const errorLabel = btn.getAttribute('data-label-error') || 'Unable to copy';
+        const labelEl = btn.querySelector('.share-link__copy-label') || btn;
+        function setLabel(text) {
+          if (labelEl) labelEl.textContent = text;
+        }
+
+        btn.addEventListener('click', function() {
+          const value = btn.getAttribute('data-copy-share-link');
+          if (!value) return;
+          btn.classList.add('is-busy');
+          copyTextToClipboard(value).then(function() {
+            btn.classList.add('is-copied');
+            setLabel(successLabel);
+            setTimeout(function() {
+              btn.classList.remove('is-copied');
+              btn.classList.remove('is-busy');
+              setLabel(defaultLabel);
+            }, 2000);
+          }).catch(function() {
+            btn.classList.remove('is-copied');
+            setLabel(errorLabel);
+            setTimeout(function() {
+              btn.classList.remove('is-busy');
+              setLabel(defaultLabel);
+            }, 2500);
+          });
+        });
+      });
+    })();
 
     // Drag & drop ordering for stations --------------------------------------
     (function initStationDnD() {

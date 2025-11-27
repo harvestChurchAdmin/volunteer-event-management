@@ -72,12 +72,21 @@ const slotTotals = stations.reduce((acc, station) => {
 const slotPercent = slotTotals.capacity > 0
   ? Math.round((slotTotals.filled / slotTotals.capacity) * 100)
   : 0;
+const publishState = String(event.publish_state || (event.is_published ? 'published' : 'draft'));
+const isDraft = publishState === 'draft';
+const isPrivate = publishState === 'private';
+const isPublic = publishState === 'published';
+const sharePath = '/events/' + event.event_id;
+const absoluteShareUrl = (typeof shareUrl === 'string' && shareUrl) ? shareUrl : sharePath;
+const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
 %>
 
 <!-- Page header: core event metadata + publish/delete actions -->
-<section class="page-header page-shell">
-  <div>
+<section class="page-header page-shell page-header--two-col admin-event-header">
+  <div class="page-header__back">
     <a href="/admin/dashboard" class="btn-link">&larr; Back to dashboard</a>
+  </div>
+  <div class="page-header__primary">
     <h1>
       <span class="type-icon <%= isPotluck ? 'type-icon--potluck' : 'type-icon--schedule' %>" title="<%= isPotluck ? 'Potluck event' : 'Scheduled event' %>" aria-label="<%= isPotluck ? 'Potluck event' : 'Scheduled event' %>">
         <% if (isPotluck) { %>
@@ -113,57 +122,109 @@ const slotPercent = slotTotals.capacity > 0
       </div>
     <% } %>
   </div>
-  <div class="page-header__actions">
-    <a class="btn-link"
-       href="<%= event.is_published
-         ? ('/events/' + event.event_id + '?return=' + encodeURIComponent('/admin/event/' + event.event_id))
-         : ('/events/' + event.event_id + '?preview=1&return=' + encodeURIComponent('/admin/event/' + event.event_id)) %>">
-      <%= event.is_published ? 'View public page' : 'Preview public page' %>
-    </a>
-    <details class="dropdown dropdown--float">
-      <summary class="btn btn-accent">Actions</summary>
-      <div class="dropdown__menu">
-        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/print?auto=1" target="_blank" rel="noopener">
-          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 9V3h12v6h2a2 2 0 0 1 2 2v6h-4v4H8v-4H4v-6a2 2 0 0 1 2-2h0Zm2-4v4h8V5H8Zm8 10H8v4h8v-4Z"/></svg>
-          Printable PDF
-        </a>
-        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
-          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v2H5V4Zm0 5h14v2H5V9Zm0 5h8v2H5v-2Z"/></svg>
-          Export skeleton (no contacts)
-        </a>
-        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
-          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
-          Quick Export
-        </a>
-        <button class="dropdown__link" data-open="#exportCsvModal" type="button">
-          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
-          Advanced Export
-        </button>
-        <button class="dropdown__link" data-open="#editEventModal" type="button">
-          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
-          Edit event…
-        </button>
-        <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item"
-              data-confirm="Delete this event and all associated stations, time blocks, and volunteers? This cannot be undone."
-              data-confirm-cta="Delete">
-          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-          <button type="submit" class="dropdown__link btn-danger">
-            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
-            Delete event
+  <div class="page-header__actions page-header__actions--flush-right">
+    <div class="header-actions__row">
+      <a class="btn-link"
+         href="<%= isDraft
+           ? (sharePath + '?preview=1&return=' + encodeURIComponent('/admin/event/' + event.event_id))
+           : (sharePath + '?return=' + encodeURIComponent('/admin/event/' + event.event_id)) %>">
+        <%= isDraft ? 'Preview public page' : (isPrivate ? 'Open private link' : 'View public page') %>
+      </a>
+      <details class="dropdown dropdown--float">
+        <summary class="btn btn-accent">Actions</summary>
+        <div class="dropdown__menu">
+          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/print?auto=1" target="_blank" rel="noopener">
+            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 9V3h12v6h2a2 2 0 0 1 2 2v6h-4v4H8v-4H4v-6a2 2 0 0 1 2-2h0Zm2-4v4h8V5H8Zm8 10H8v4h8v-4Z"/></svg>
+            Printable PDF
+          </a>
+          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
+            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v2H5V4Zm0 5h14v2H5V9Zm0 5h8v2H5v-2Z"/></svg>
+            Export skeleton (no contacts)
+          </a>
+          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
+            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
+            Quick Export
+          </a>
+          <button class="dropdown__link" data-open="#exportCsvModal" type="button">
+            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
+            Advanced Export
           </button>
-        </form>
-      </div>
-    </details>
-    <form action="/admin/event/<%= event.event_id %>/publish" method="POST">
+          <button class="dropdown__link" data-open="#editEventModal" type="button">
+            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+            Edit event…
+          </button>
+          <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item"
+                data-confirm="Delete this event and all associated stations, time blocks, and volunteers? This cannot be undone."
+                data-confirm-cta="Delete">
+            <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+            <button type="submit" class="dropdown__link btn-danger">
+              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
+              Delete event
+            </button>
+          </form>
+        </div>
+      </details>
+    </div>
+    <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="publish-form">
       <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-      <input type="hidden" name="publish" value="<%= event.is_published ? '0' : '1' %>">
       <input type="hidden" name="redirectTo" value="/admin/event/<%= event.event_id %>">
-      <button class="btn <%= event.is_published ? 'btn-secondary' : 'btn-primary' %>">
-        <%= event.is_published ? 'Unpublish' : 'Publish' %>
-      </button>
+      <label for="publish-state" class="sr-only">Visibility</label>
+      <div class="publish-form__row">
+        <select id="publish-state" name="publish_state">
+          <option value="draft" <%= isDraft ? 'selected' : '' %>>Draft</option>
+          <option value="private" <%= isPrivate ? 'selected' : '' %>>Private</option>
+          <option value="published" <%= isPublic ? 'selected' : '' %>>Public</option>
+        </select>
+        <button class="btn btn-primary" type="submit">Update</button>
+      </div>
+      <div class="muted small" style="text-align:right;">
+        <button type="button" class="btn-link small" data-open="#visibilityHelpModal">What do these mean?</button>
+      </div>
     </form>
+    <% if (!isDraft) { %>
+      <button type="button"
+              class="btn-link share-link__copy-btn share-link__copy-btn--minimal"
+              data-copy-share-link="<%= absoluteShareUrl %>"
+              data-label-default="<%= isPrivate ? 'Copy private link' : 'Copy link' %>"
+              data-label-success="Copied!"
+              data-label-error="Unable to copy">
+        <svg class="share-link__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 3a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3h-1v-2h1a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v2H6V6a3 3 0 0 1 3-3h6Zm-6 8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3h3Zm0 2H6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1Z"/></svg>
+        <span class="share-link__copy-label" aria-live="polite"><%= isPrivate ? 'Copy private link' : 'Copy link' %></span>
+      </button>
+    <% } %>
   </div>
 </section>
+
+<%
+  const visibilityModalFooter = `
+    <button class="btn btn-secondary" data-close="#visibilityHelpModal">Close</button>
+  `;
+%>
+<%- include('../partials/modal-start', { id: 'visibilityHelpModal', title: 'Publish & Visibility' }) %>
+  <div class="visibility-help">
+    <p class="muted">Choose how this event shows up for volunteers:</p>
+    <div class="visibility-help__grid">
+      <article class="visibility-help__card">
+        <div class="visibility-help__badge visibility-help__badge--draft">Draft</div>
+        <p class="visibility-help__title">Admins only</p>
+        <p class="muted small">Use while editing or planning. Hidden everywhere except for admins.</p>
+      </article>
+      <article class="visibility-help__card">
+        <div class="visibility-help__badge visibility-help__badge--private">Private</div>
+        <p class="visibility-help__title">Share with a direct link</p>
+        <p class="muted small">Keeps the event off the public list but anyone with the link can sign up.</p>
+      </article>
+      <article class="visibility-help__card">
+        <div class="visibility-help__badge visibility-help__badge--public">Public</div>
+        <p class="visibility-help__title">Listed on Upcoming Sign-ups</p>
+        <p class="muted small">Visible to everyone browsing the site and accessible via a direct link.</p>
+      </article>
+    </div>
+    <div class="visibility-help__note">
+      <strong>Tip:</strong> you can switch visibility at any time—existing stations and sign-ups stay intact.
+    </div>
+  </div>
+<%- include('../partials/modal-end', { id: 'visibilityHelpModal', footer: visibilityModalFooter }) %>
 
 <%- include('../partials/messages', { messages }) %>
 

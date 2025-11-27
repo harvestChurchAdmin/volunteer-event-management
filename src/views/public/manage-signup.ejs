@@ -65,8 +65,9 @@
               <h2><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h2>
               <% const stationAbout = station.about || station.description || ''; %>
               <% const stationDuties = station.duties || ''; %>
+              <% const factCount = (stationAbout ? 1 : 0) + (stationDuties ? 1 : 0); %>
               <% if (stationAbout || stationDuties) { %>
-                <div class="station-quick-facts">
+                <div class="station-quick-facts <%= factCount === 1 ? 'station-quick-facts--single' : '' %>">
                   <% if (stationAbout) { %>
                     <div class="station-quick-fact">
                       <h3>Description</h3>

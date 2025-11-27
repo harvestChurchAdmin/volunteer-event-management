@@ -117,6 +117,12 @@
     if (!modal) return;
     if (opener) modalOpener.set(modal, opener);
     try {
+      modal._scrollPosition = {
+        x: window.pageXOffset || document.documentElement.scrollLeft || 0,
+        y: window.pageYOffset || document.documentElement.scrollTop || 0
+      };
+    } catch (_) { modal._scrollPosition = null; }
+    try {
       if (modal.parentNode !== document.body) {
         modal._originalParent = modal.parentNode;
         modal._originalNextSibling = modal.nextSibling;
@@ -194,6 +200,13 @@
 
     const opener = modalOpener.get(modal);
     if (opener && typeof opener.focus === 'function') opener.focus();
+
+    // Restore scroll position to avoid jumping after closing modals.
+    // Do it on the next frame so any focus-induced scroll is corrected.
+    if (modal._scrollPosition && typeof window.scrollTo === 'function') {
+      const { x = 0, y = 0 } = modal._scrollPosition;
+      requestAnimationFrame(() => { window.scrollTo(x, y); });
+    }
   }
 
   /**
@@ -344,6 +357,32 @@
           timeBlockErrors.innerHTML = '';
         }
 
+        if (modal === timeBlockModal && timeBlockForm) {
+          const addAnother = qs('#timeblock-add-another', timeBlockForm);
+          if (addAnother) addAnother.checked = false;
+
+          // Prefill start/end/capacity if provided by the opener (e.g., “Add next block”)
+          const nextStart = btn.getAttribute('data-next-start');
+          const nextEnd = btn.getAttribute('data-next-end');
+          const nextCap = btn.getAttribute('data-next-capacity');
+          const startField = qs('#timeblock-start-visible');
+          const endField = qs('#timeblock-end-visible');
+          const capField = qs('#timeblock-capacity');
+          if (startField && nextStart) {
+            startField.value = nextStart;
+            const hidden = qs('#timeblock-start-hidden');
+            if (hidden) hidden.value = canonicalFromLocal(nextStart);
+          }
+          if (endField && nextEnd) {
+            endField.value = nextEnd;
+            const hidden = qs('#timeblock-end-hidden');
+            if (hidden) hidden.value = canonicalFromLocal(nextEnd);
+          }
+          if (capField && nextCap) {
+            capField.value = nextCap;
+          }
+        }
+
         openModal(modal, btn);
         initDatetimeFields(modal);
       });
@@ -419,6 +458,9 @@
       form.addEventListener('submit', function() { rememberScrollAndStationFromForm(form); });
     });
     qsa('form[id^="editReservationForm-"]').forEach(function(form) {
+      form.addEventListener('submit', function() { rememberScrollAndStationFromForm(form); });
+    });
+    qsa('form[id^="editBlockForm-"]').forEach(function(form) {
       form.addEventListener('submit', function() { rememberScrollAndStationFromForm(form); });
     });
 
@@ -536,10 +578,16 @@
       });
     });
 
-    // Click outside to close -------------------------------------------------
+    // Close on mousedown outside the modal, but ignore mouseup (so selecting/copying outside won't close)
     qsa('.modal').forEach(function(modal) {
-      modal.addEventListener('click', function(e) {
+      modal.addEventListener('mousedown', function(e) {
         if (e.target === modal) closeModal(modal);
+      });
+      modal.addEventListener('mouseup', function(e) {
+        if (e.target === modal) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
       });
     });
 
@@ -899,6 +947,24 @@
           sortStationsByTime(list);
         });
       });
+
+      // When confirming the modal, mirror the new order into the visible grid
+      const reorderConfirm = qs('#reorderStationsModal .js-reorder-stations-confirm');
+      if (reorderConfirm) {
+        reorderConfirm.addEventListener('click', () => {
+          const modalList = qs('#reorderStationsModal .station-reorder-list');
+          const gridList = qs('.js-station-list');
+          if (!modalList || !gridList) return;
+          const order = Array.from(modalList.querySelectorAll('[data-station-id]'))
+            .map(el => el.getAttribute('data-station-id'))
+            .filter(Boolean);
+          if (!order.length) return;
+          order.forEach(id => {
+            const card = gridList.querySelector('article.station-card[data-station-id="' + id + '"]');
+            if (card) gridList.appendChild(card);
+          });
+        });
+      }
     })();
 
     // Drag & drop ordering for items within stations (potluck only) ----------

@@ -127,6 +127,10 @@ const slotPercent = slotTotals.capacity > 0
           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 9V3h12v6h2a2 2 0 0 1 2 2v6h-4v4H8v-4H4v-6a2 2 0 0 1 2-2h0Zm2-4v4h8V5H8Zm8 10H8v4h8v-4Z"/></svg>
           Printable PDF
         </a>
+        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
+          <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v2H5V4Zm0 5h14v2H5V9Zm0 5h8v2H5v-2Z"/></svg>
+          Export skeleton (no contacts)
+        </a>
         <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
           <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
           Quick Export
@@ -435,6 +439,24 @@ const slotPercent = slotTotals.capacity > 0
                   <div class="admin-block__actions">
                     <button class="btn btn-primary" data-open="#addReservationModal-<%= block.block_id %>" <%= block.is_full ? 'disabled title="Time block is full"' : '' %>>Add volunteer</button>
                     <button class="btn btn-outline" data-open="#editBlockModal-<%= block.block_id %>"><%= isPotluck ? 'Edit item' : 'Edit block' %></button>
+                    <% if (!isPotluck) {
+                         const startDt = parseLocalDate(block.start_time);
+                         const endDt = parseLocalDate(block.end_time);
+                         const durationMs = (startDt && endDt) ? (endDt.getTime() - startDt.getTime()) : null;
+                         const nextStart = endDt || null;
+                         const nextEnd = (nextStart && durationMs != null) ? new Date(nextStart.getTime() + durationMs) : null;
+                         const fmtInput = (dt) => dt ? `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}` : '';
+                    %>
+                      <button class="btn btn-ghost"
+                              data-open="#timeBlockModal"
+                              data-station-id="<%= station.station_id %>"
+                              data-event-id="<%= event.event_id %>"
+                              data-next-start="<%= fmtInput(nextStart) %>"
+                              data-next-end="<%= fmtInput(nextEnd) %>"
+                              data-next-capacity="<%= block.capacity_needed %>">
+                        Add next block
+                      </button>
+                    <% } %>
                     <form class="inline-form js-confirm"
                           data-confirm="Delete this time block? This cannot be undone."
                           data-confirm-cta="Delete"
@@ -466,6 +488,16 @@ const slotPercent = slotTotals.capacity > 0
                         <label for="add-reservation-phone-<%= block.block_id %>">Phone</label>
                         <input type="tel" id="add-reservation-phone-<%= block.block_id %>" name="phone">
                       </div>
+                      <% if (isPotluck) { %>
+                        <div class="form-group full">
+                          <label for="add-reservation-dish-<%= block.block_id %>">Dish name</label>
+                          <input type="text"
+                                 id="add-reservation-dish-<%= block.block_id %>"
+                                 name="dish_note"
+                                 placeholder="What dish will they bring?"
+                                 required>
+                        </div>
+                      <% } %>
                     </div>
                   </form>
                 <%- include('../partials/modal-end', { id: 'addReservationModal-' + block.block_id, formId: 'addReservationForm-' + block.block_id }) %>
@@ -615,7 +647,7 @@ const slotPercent = slotTotals.capacity > 0
       formId: undefined,
       footer: `
         <button class="btn btn-secondary" data-close="#reorderStationsModal">Cancel</button>
-        <button class="btn btn-primary" data-close="#reorderStationsModal">OK</button>
+        <button class="btn btn-primary js-reorder-stations-confirm" data-close="#reorderStationsModal">OK</button>
       `
     }) %>
   <% } else { %>

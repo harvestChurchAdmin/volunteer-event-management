@@ -157,6 +157,10 @@
                           <%= event.is_published ? 'Unpublish' : 'Publish' %>
                         </button>
                       </form>
+                      <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
+                        <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v2H5V4Zm0 5h14v2H5V9Zm0 5h8v2H5v-2Z"/></svg>
+                        Export skeleton (no contacts)
+                      </a>
                       <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a copy of this event (stations and time blocks only)?" data-confirm-cta="Copy">
                         <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
                         <button type="submit" class="dropdown__link">

@@ -2,6 +2,7 @@
 
 <% const { fmt12 } = helpers; %>
 <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
+<% const debugLayout = !!locals.debugLayout; %>
 <% const selectedBlockIds = Array.isArray(locals.selectedBlockIds) ? locals.selectedBlockIds : []; %>
 <% const draftDishNotes = (locals.draftDishNotes && typeof locals.draftDishNotes === 'object') ? locals.draftDishNotes : {}; %>
 <% const formDefaults = locals.formDefaults || {}; %>
@@ -43,13 +44,13 @@
   <% } %>
 </section>
 
-<section class="page-section page-shell">
-  <article class="card card--plain">
-    <% if (event.description) { %>
-      <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
-    <% } else { %>
-      <p class="muted"><%= isPotluck ? 'Select a category and item to bring.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
-    <% } %>
+<section class="page-section page-shell <%= debugLayout ? 'debug-layout' : '' %>">
+      <article class="card card--plain" data-debug="<%= debugLayout ? 'station-card' : '' %>">
+        <% if (event.description) { %>
+          <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
+        <% } else { %>
+          <p class="muted"><%= isPotluck ? 'Select a category and item to bring.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
+        <% } %>
     <%
       const brandInfo = locals.brand || {};
       const supportEmail = brandInfo.supportContactEmail || '';
@@ -88,7 +89,7 @@
 %>
 
 <% if (hasTimeBlocks) { %>
-  <section class="page-section page-shell">
+  <section class="page-section page-shell <%= debugLayout ? 'debug-layout' : '' %>" data-debug="<%= debugLayout ? 'page-shell' : '' %>">
     <% if (!isPotluck) { %>
       <div class="slot-toolbar">
         <div class="slot-toolbar__group">
@@ -111,24 +112,25 @@
         <% stations.forEach(station => { %>
           <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
           <% if (blocks.length > 0) { %>
-            <article class="card station-card">
-              <div class="card-header">
+            <article class="card station-card" data-debug="<%= debugLayout ? 'station-card' : '' %>">
+              <div class="card-header" data-debug="<%= debugLayout ? 'card-header' : '' %>">
               <div class="station-card__title">
                 <h2><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h2>
                 <% const stationAbout = station.about || station.description || ''; %>
                 <% const stationDuties = station.duties || ''; %>
+                <% const factCount = (stationAbout ? 1 : 0) + (stationDuties ? 1 : 0); %>
                 <% if (stationAbout || stationDuties) { %>
-                  <div class="station-quick-facts">
+                  <div class="station-quick-facts <%= factCount === 1 ? 'station-quick-facts--single' : '' %>" data-debug="<%= debugLayout ? 'station-quick-facts' : '' %>">
                     <% if (stationAbout) { %>
-                      <div class="station-quick-fact">
+                      <div class="station-quick-fact" data-debug="<%= debugLayout ? 'station-quick-fact' : '' %>">
                         <h3>Description</h3>
-                        <p><%= stationAbout %></p>
+                        <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
                       </div>
                     <% } %>
                     <% if (stationDuties) { %>
-                      <div class="station-quick-fact">
+                      <div class="station-quick-fact" data-debug="<%= debugLayout ? 'station-quick-fact' : '' %>">
                         <h3>Duties</h3>
-                        <p><%= stationDuties %></p>
+                        <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
                       </div>
                     <% } %>
                   </div>
@@ -152,6 +154,7 @@
                   role="button"
                   aria-pressed="<%= isSelected ? 'true' : 'false' %>"
                   tabindex="<%= block.is_full && !isSelected ? -1 : 0 %>"
+                  data-debug="<%= debugLayout ? 'time-block-item' : '' %>"
                 >
                     <div class="time-block-item__info">
                       <span class="station-chip muted" data-role="station-chip"><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></span>
@@ -160,7 +163,7 @@
                       <% } else { %>
                         <strong><%= helpers.fmtRange(block.start_time, block.end_time) %></strong>
                       <% } %>
-                      <% if (isPotluck) { %>
+                    <% if (isPotluck) { %>
                         <% const hasServings = block.servings_min != null || block.servings_max != null; %>
                         <% if (hasServings) { %>
                           <span class="muted">
@@ -173,6 +176,10 @@
                       <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
                       <% /* Potluck "Others bringing" is rendered in the dedicated right column below. */ %>
                       <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
+                      <div class="time-block-item__hint">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
+                        Click “<%= isPotluck ? 'Sign up' : 'Select' %>” to add this <%= isPotluck ? 'item' : 'time block' %>.
+                      </div>
                     </div>
                     <% if (isPotluck) { %>
                       <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>

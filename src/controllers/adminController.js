@@ -60,6 +60,98 @@ exports.showEventDetail = (req, res, next) => {
 };
 
 /**
+ * Export a "skeleton" view of an event: structure and counts only (no volunteer PII).
+ */
+exports.exportEventSkeletonCsv = (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const event = adminService.getEventDetailsForAdmin(eventId);
+    if (!event) return next(new Error('Event not found'));
+
+    const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
+    const filenameSafe = String(event.name || 'event').replace(/[^A-Za-z0-9._-]+/g, '_');
+    const filename = `${filenameSafe}_${event.event_id}_skeleton.csv`;
+
+    // Flatten rows without volunteer PII
+    const rows = [];
+    const stations = Array.isArray(event.stations) ? event.stations : [];
+    stations.forEach(station => {
+      const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : [];
+      blocks.forEach(block => {
+        const reservedCount = Array.isArray(block.reservations)
+          ? block.reservations.length
+          : Number(block.reserved_count || 0);
+        const feeds = (block.servings_min != null)
+          ? String(block.servings_min) + (block.servings_max != null ? `-${block.servings_max}` : '')
+          : (block.servings_max != null ? `≤${block.servings_max}` : '');
+        rows.push({
+          event_name: event.name,
+          event_start: event.date_start,
+          event_end: event.date_end,
+          signup_mode: isPotluck ? 'potluck' : 'schedule',
+          station_name: station.name,
+          station_description: station.about || station.description || '',
+          station_duties: station.duties || '',
+          block_title: block.title || '',
+          block_start: isPotluck ? '' : block.start_time || '',
+          block_end: isPotluck ? '' : block.end_time || '',
+          feeds,
+          capacity: block.capacity_needed,
+          reserved: reservedCount
+        });
+      });
+    });
+
+    function csvEscapeSafe(v) {
+      let s = v == null ? '' : String(v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s;
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    const headers = [
+      'Event',
+      'Event Start',
+      'Event End',
+      'Mode',
+      'Station/Category',
+      'Station Description',
+      'Station Duties',
+      'Item/Block',
+      'Block Start',
+      'Block End',
+      'Feeds',
+      'Slots',
+      'Signed Up'
+    ];
+
+    const lines = [];
+    lines.push(headers.map(csvEscapeSafe).join(','));
+    rows.forEach(r => {
+      lines.push([
+        r.event_name,
+        r.event_start,
+        r.event_end,
+        r.signup_mode,
+        r.station_name,
+        r.station_description,
+        r.station_duties,
+        r.block_title,
+        r.block_start,
+        r.block_end,
+        r.feeds,
+        r.capacity,
+        r.reserved
+      ].map(csvEscapeSafe).join(','));
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(lines.join('\n'));
+  } catch (e) { next(e); }
+};
+
+/**
  * Export the event roster (volunteers) as a CSV, arranged by time, date, and station.
  */
 exports.exportEventCsv = (req, res, next) => {

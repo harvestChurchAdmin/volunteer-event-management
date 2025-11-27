@@ -520,11 +520,13 @@ function addReservationToBlock(blockId, volunteer) {
   if (!volunteer || !volunteer.name || !volunteer.email) {
     throw createError(400, 'Volunteer name and email are required.');
   }
+  const dishNote = (volunteer.dish_note || volunteer.note || '').toString().trim();
+  const notes = dishNote ? { [blockId]: dishNote } : undefined;
   const result = dal.public.reserveVolunteerSlots({
     name: volunteer.name,
     email: volunteer.email,
     phone: volunteer.phone || ''
-  }, [blockId]);
+  }, [blockId], notes);
   if (!result || !result.count) {
     throw createError(409, 'Volunteer is already registered for this time block.');
   }

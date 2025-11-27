@@ -64,8 +64,9 @@ exports.showEventDetail = (req, res, next) => {
             req.flash('error', 'That event is no longer available.');
             return res.redirect('/events');
         }
+        const debugLayout = String(req.query.debug || '').toLowerCase() === 'layout';
         // Do not pass messages explicitly; app middleware exposes res.locals.messages
-        res.render('public/event-detail', { title: event.name, event, helpers, preview, backTo });
+        res.render('public/event-detail', { title: event.name, event, helpers, preview, backTo, debugLayout, query: req.query });
     } catch (error) {
         console.error(`--- ERROR IN showEventDetail for eventId: ${req.params.eventId} ---`, error);
         next(error);

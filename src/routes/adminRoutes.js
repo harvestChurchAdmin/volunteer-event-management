@@ -9,6 +9,7 @@ router.get('/dashboard', isAuthenticated, adminController.showDashboard);
 router.get('/help/formatting', isAuthenticated, adminController.showFormattingHelp);
 router.get('/help/workflows', isAuthenticated, adminController.showWorkflowHelp);
 router.get('/event/:eventId', isAuthenticated, adminController.showEventDetail);
+router.get('/event/:eventId/export-skeleton.csv', isAuthenticated, adminController.exportEventSkeletonCsv);
 // CSV export of event volunteers
 router.get('/event/:eventId/export.csv', isAuthenticated, adminController.exportEventCsvAdvanced);
 // Print-friendly roster view (use browser "Save as PDF")

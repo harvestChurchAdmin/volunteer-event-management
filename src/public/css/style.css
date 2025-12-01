@@ -1278,7 +1278,22 @@ details.dropdown[open] > summary { opacity: 0.9; }
   gap: 1rem;
   min-height: 200px;
   height: 100%;
+  position: relative;
 }
+
+.event-card__link {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  z-index: 1;
+  display: block;
+}
+
+.event-card__link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 
 .event-card__hero {
   display: flex;
@@ -1412,6 +1427,8 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
 .event-card .card-actions {
   margin-top: auto;
+  position: relative;
+  z-index: 2;
 }
 
 .signup-panel {

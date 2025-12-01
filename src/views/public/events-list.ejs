@@ -24,7 +24,7 @@
       <% const sameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate(); %>
       <% const timeOnly = (d) => new Date(d).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); %>
       <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
-      <% const heroLabel = isPotluck ? 'Potluck event' : 'Volunteer shift'; %>
+      <% const heroLabel = isPotluck ? 'Potluck event' : 'Volunteer event'; %>
       <% const heroDesc = isPotluck ? 'Sign up to contribute a dish or item.' : 'Pick a time slot to lend a hand.'; %>
       <% const heroIcon = isPotluck ? '/img/event-icon-potluck.svg' : '/img/event-icon-volunteer.svg'; %>
       <% const metaClasses = ['event-card__meta', isPotluck ? 'event-card__meta--potluck' : '', sameDay ? '' : 'event-card__meta--multiday'].filter(Boolean).join(' '); %>
@@ -32,6 +32,7 @@
       <% const endDateLabel = end.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); %>
       <% const startISO = start.toISOString(); const endISO = end.toISOString(); %>
       <article class="card event-card">
+        <a class="event-card__link" href="/events/<%= event.event_id %>" aria-label="View details for <%= event.name %>"></a>
         <div class="event-card__hero <%= isPotluck ? 'event-card__hero--potluck' : 'event-card__hero--schedule' %>">
           <span class="event-card__hero-icon" aria-hidden="true">
             <img src="<%= heroIcon %>" alt="" loading="lazy" decoding="async">

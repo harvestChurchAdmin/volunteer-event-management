@@ -201,6 +201,29 @@ document.addEventListener('DOMContentLoaded', () => {
           applyAdminSort(key, next);
         });
       });
+
+      // Allow clicking anywhere on the row to manage the event (except action controls)
+      rows.forEach(row => {
+        const targetUrl = row.getAttribute('data-event-url');
+        if (!targetUrl) return;
+        row.addEventListener('click', (event) => {
+          const blocker = event.target.closest('a, button, summary, input, select, textarea, details');
+          if (blocker) return;
+          window.location.href = targetUrl;
+        });
+        row.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            const blocker = event.target.closest('a, button, summary, input, select, textarea, details');
+            if (blocker) return;
+            event.preventDefault();
+            window.location.href = targetUrl;
+          }
+        });
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('role', 'link');
+        const eventName = row.getAttribute('data-event-name') || row.getAttribute('data-sort-name') || 'event';
+        row.setAttribute('aria-label', 'Manage event ' + eventName);
+      });
     }
   } catch (err) {
     console.error('[AdminDashboard] Failed to initialize table sorting:', err);

@@ -1,0 +1,20 @@
+<svg width="96" height="96" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Potluck dish icon">
+  <defs>
+    <linearGradient id="potluckGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffa75c" />
+      <stop offset="100%" stop-color="#ff7fa5" />
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="#fff6ef" />
+  <ellipse cx="48" cy="60" rx="30" ry="14" fill="#ffe0cd" />
+  <ellipse cx="48" cy="52" rx="32" ry="16" fill="#fff" stroke="#ffb997" stroke-width="3" />
+  <path d="M20 52c6 0 9-10 18-10s13 10 20 10 9-8 18-8 14 8 14 8" fill="#ffc48e" opacity="0.75" />
+  <circle cx="34" cy="50" r="4" fill="#7dd1aa" />
+  <circle cx="48" cy="46" r="5" fill="#ffda65" />
+  <circle cx="62" cy="50" r="4" fill="#7dd1aa" />
+  <rect x="60" y="24" width="18" height="9" rx="4.5" fill="#ffe0ee" />
+  <rect x="60" y="34" width="12" height="5" rx="2.5" fill="#ffd0da" />
+  <rect x="20" y="24" width="18" height="9" rx="4.5" fill="#ffe9c9" />
+  <rect x="20" y="34" width="12" height="5" rx="2.5" fill="#ffdcb8" />
+  <path d="M30 70h36" stroke="url(#potluckGradient)" stroke-width="6" stroke-linecap="round" />
+</svg>

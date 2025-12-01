@@ -97,6 +97,8 @@
               %>
               <tr class="event-row <%= 'event-row--' + publishState %> <%= isPast ? 'event-row--past' : '' %>"
                   data-event-id="<%= event.event_id %>"
+                  data-event-url="/admin/event/<%= event.event_id %>"
+                  data-event-name="<%= event.name %>"
                   data-sort-name="<%= (event.name || '').toLowerCase() %>"
                   data-sort-date="<%= event.date_start %>"
                   data-sort-status="<%= sortStatus %>">

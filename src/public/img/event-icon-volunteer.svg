@@ -1,0 +1,17 @@
+<svg width="96" height="96" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Volunteer shift icon">
+  <defs>
+    <linearGradient id="volunteerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f8ff7" />
+      <stop offset="100%" stop-color="#9fbefc" />
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="#f0f5ff" />
+  <circle cx="32" cy="36" r="14" fill="#4f8ff7" opacity="0.95" />
+  <circle cx="62" cy="32" r="11" fill="#7db3ff" />
+  <path d="M18 72c0-14 12-26 26-26s26 12 26 26" fill="url(#volunteerGradient)" />
+  <path d="M50 66c3-6 10-10 18-10s15 4 18 10" fill="#c7d9ff" />
+  <rect x="20" y="20" width="10" height="4" rx="2" fill="#4f8ff7" opacity="0.4" />
+  <rect x="20" y="26" width="6" height="4" rx="2" fill="#4f8ff7" opacity="0.3" />
+  <rect x="20" y="32" width="8" height="4" rx="2" fill="#4f8ff7" opacity="0.2" />
+  <rect x="54" y="48" width="12" height="6" rx="3" fill="#4f7ef1" opacity="0.35" />
+</svg>

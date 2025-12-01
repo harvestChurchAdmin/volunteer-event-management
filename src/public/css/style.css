@@ -52,9 +52,19 @@ body {
   font-size: 15px;
   line-height: 1.6;
   color: var(--text-strong);
-  background: var(--surface-page);
+  background: #fefefe;
+  position: relative;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(223, 228, 243, 0.9) 0%, #fefefe 45%, #ffffff 100%);
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* Interactive elements ---------------------------------------------------- */
@@ -535,8 +545,33 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
 .tile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: clamp(1.25rem, 3vw, 1.75rem);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  padding: 1rem 0;
+  align-items: stretch;
+}
+
+.tile-grid > * {
+  min-width: 0;
+  height: 100%;
+  animation: cardFadeIn 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tile-grid > *:nth-child(2) { animation-delay: 80ms; }
+.tile-grid > *:nth-child(3) { animation-delay: 160ms; }
+.tile-grid > *:nth-child(4) { animation-delay: 240ms; }
+.tile-grid > *:nth-child(5) { animation-delay: 320ms; }
+.tile-grid > *:nth-child(6) { animation-delay: 400ms; }
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .station-grid {
@@ -574,7 +609,7 @@ details.dropdown[open] > summary { opacity: 0.9; }
   z-index: 100;
   background: var(--surface-elevated);
   backdrop-filter: blur(18px);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06), 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 .topbar__inner {
@@ -648,12 +683,13 @@ details.dropdown[open] > summary { opacity: 0.9; }
   font-weight: 600;
   padding: 0.45rem 0.35rem;
   border-radius: 11px;
-  transition: color var(--transition), background var(--transition);
+  transition: color var(--transition), background var(--transition), text-decoration-color var(--transition);
 }
 
 .topbar__menu a:hover {
   color: var(--text-strong);
   background: rgba(37, 99, 235, 0.08);
+  text-decoration: underline;
 }
 
 .topbar__menu a.is-active {
@@ -1237,10 +1273,11 @@ details.dropdown[open] > summary { opacity: 0.9; }
 }
 
 .event-card {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
   gap: 1rem;
   min-height: 200px;
+  height: 100%;
 }
 
 .event-card__hero {
@@ -1253,7 +1290,7 @@ details.dropdown[open] > summary { opacity: 0.9; }
   border: 1px solid rgba(15, 23, 42, 0.06);
   background: linear-gradient(135deg, #f5f7fb, #fdfdfe);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  min-height: 112px;
+  min-height: 124px;
 }
 
 .event-card__hero-icon {
@@ -1307,6 +1344,12 @@ details.dropdown[open] > summary { opacity: 0.9; }
   background: radial-gradient(circle at 30% 30%, #ffffff, #ffe7d5);
 }
 
+.event-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .event-card__meta {
   display: flex;
   align-items: center;
@@ -1315,6 +1358,7 @@ details.dropdown[open] > summary { opacity: 0.9; }
   border-radius: 1rem;
   background: rgba(59, 130, 246, 0.08);
   border: 1px solid rgba(59, 130, 246, 0.15);
+  min-height: 118px;
 }
 
 .event-card__meta--potluck {
@@ -1833,6 +1877,21 @@ details.dropdown[open] > summary { opacity: 0.9; }
   .row-actions { justify-content: flex-start; }
 
   /* Add a subtle colored accent bar so each event feels like a distinct card */
+  .table tbody tr.event-row {
+    position: relative;
+    cursor: pointer;
+  }
+
+  .row-actions,
+  .row-actions * {
+    cursor: pointer;
+  }
+
+  .table tbody tr.event-row:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: -2px;
+  }
+
   .event-row::before {
     content: '';
     position: absolute;
@@ -2753,6 +2812,23 @@ details.dropdown[open] > summary { opacity: 0.9; }
     margin-top: 0;
     padding-top: 0;
   }
+
+  .admin-block.has-open-reservations {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-block.has-open-reservations .admin-block__main,
+  .admin-block.has-open-reservations .admin-block__actions,
+  .admin-block__main:has(details.admin-reservations[open]) + .admin-block__actions {
+    width: 100%;
+  }
+
+  .admin-block.has-open-reservations .admin-block__actions,
+  .admin-block__main:has(details.admin-reservations[open]) + .admin-block__actions {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
 }
 
 /* When volunteers are collapsed, provide modest spacing to actions */
@@ -2807,31 +2883,48 @@ details.dropdown[open] > summary { opacity: 0.9; }
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.9rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  grid-auto-rows: 1fr;
+  gap: clamp(0.9rem, 1.5vw, 1.25rem);
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-auto-rows: auto;
   align-items: stretch;
 }
 
 .admin-reservation {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.55rem 0.9rem;
-  align-items: center;
-  padding: 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+  padding: 0.85rem 1rem;
   border: 1px solid var(--border-soft);
   border-left: 4px solid var(--brand);
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
-  height: 100%;
   box-sizing: border-box;
+}
+
+.admin-reservation__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 0.75rem;
 }
 
 .admin-reservation__info {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  min-width: 220px;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.admin-reservation__info span {
+  display: block;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.admin-reservation__note {
+  word-break: break-word;
+  color: var(--text-strong);
 }
 
 .admin-reservation__info strong {
@@ -2841,7 +2934,13 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
 .admin-reservation__info strong::before { content: none; }
 
-.admin-reservation__name { display: inline-flex; align-items: center; gap: 0.4rem; }
+.admin-reservation__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .icon { width: 16px; height: 16px; display: inline-block; }
 .icon-person { color: var(--brand-strong); }
 
@@ -2850,12 +2949,21 @@ details.dropdown[open] > summary { opacity: 0.9; }
   color: var(--text-soft);
 }
 
+.admin-reservation__name strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 100%;
+}
+
 .admin-reservation__actions {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  justify-self: end;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .admin-reservation {
@@ -2907,10 +3015,9 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
   /* Volunteers list: stack and wrap safely to prevent horizontal scroll */
   .admin-reservation-list { grid-template-columns: 1fr; }
-  .admin-reservation { grid-template-columns: 1fr; }
-  .admin-reservation__info { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
-  .admin-reservation__actions { justify-self: stretch; width: 100%; }
-  .admin-reservation__actions .btn { width: 100%; text-align: center; }
+  .admin-reservation__top { display: flex; flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .admin-reservation__actions { width: 100%; justify-content: stretch; margin-left: 0; }
+  .admin-reservation__actions .btn { flex: 1 1 auto; width: 100%; text-align: center; }
   .admin-reservation__actions form { width: 100%; }
   .admin-reservation__actions form .btn { width: 100%; }
 
@@ -3182,10 +3289,13 @@ textarea {
 .site-footer__links a {
   color: rgba(255, 255, 255, 0.75);
   font-weight: 600;
+  text-decoration: none;
+  transition: color var(--transition), text-decoration-color var(--transition);
 }
 
 .site-footer__links a:hover {
   color: #fff;
+  text-decoration: underline;
 }
 
 .site-footer__meta {
@@ -3195,6 +3305,7 @@ textarea {
   padding-top: 1.25rem;
   font-size: 0.85rem;
   color: rgba(226, 232, 240, 0.7);
+  text-align: center;
 }
 
 @media (max-width: 640px) {
@@ -3225,6 +3336,8 @@ textarea {
 .debug-spacing .admin-reservations { outline: 2px dotted rgba(128, 0, 128, 0.8); background: rgba(128, 0, 128, 0.06); }
 .debug-spacing .admin-reservations summary { outline: 2px solid rgba(255, 0, 255, 0.8); background: rgba(255, 0, 255, 0.06); }
 .debug-spacing .admin-block__actions { outline: 2px solid rgba(0, 128, 255, 0.8); background: rgba(0, 128, 255, 0.06); }
+.debug-spacing .admin-reservation-list { outline: 2px dashed rgba(0, 0, 255, 0.6); background: rgba(0, 0, 255, 0.04); }
+.debug-spacing .admin-reservation { outline: 2px dashed rgba(255, 0, 0, 0.6); background: rgba(255, 0, 0, 0.05); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

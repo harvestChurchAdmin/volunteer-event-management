@@ -419,33 +419,35 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
                         <ul class="admin-reservation-list">
                           <% block.reservations.forEach(function(reservation) { %>
                             <li class="admin-reservation">
-                              <div class="admin-reservation__info">
+                              <div class="admin-reservation__top">
                                 <div class="admin-reservation__name">
                                   <svg class="icon icon-person" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                     <path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/>
                                   </svg>
-                              <strong><%= reservation.name %></strong>
-                            </div>
-                            <span><%= reservation.email %></span>
-                            <% if (reservation.phone) { %>
-                              <span><%= reservation.phone %></span>
-                            <% } %>
-                            <% if (reservation.reservation_note) { %>
-                              <span>Dish: <%= reservation.reservation_note %></span>
-                            <% } %>
-                          </div>
-                              <div class="admin-reservation__actions">
-                                <button class="btn btn-outline" data-open="#editReservationModal-<%= reservation.reservation_id %>">Edit</button>
-                                <form class="inline-form js-confirm"
-                                      data-confirm="Remove this volunteer from the time block?"
-                                      data-confirm-cta="Remove"
-                                      action="/admin/reservation/<%= reservation.reservation_id %>/delete"
-                                      method="POST">
-                                  <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                                  <input type="hidden" name="eventId" value="<%= event.event_id %>">
-                                  <input type="hidden" name="station_id" value="<%= station.station_id %>">
-                                  <button type="submit" class="btn btn-danger">Remove</button>
-                                </form>
+                                  <strong title="<%= reservation.name %>"><%= reservation.name %></strong>
+                                </div>
+                                <div class="admin-reservation__actions">
+                                  <button class="btn btn-outline" data-open="#editReservationModal-<%= reservation.reservation_id %>">Edit</button>
+                                  <form class="inline-form js-confirm"
+                                        data-confirm="Remove this volunteer from the time block?"
+                                        data-confirm-cta="Remove"
+                                        action="/admin/reservation/<%= reservation.reservation_id %>/delete"
+                                        method="POST">
+                                    <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+                                    <input type="hidden" name="eventId" value="<%= event.event_id %>">
+                                    <input type="hidden" name="station_id" value="<%= station.station_id %>">
+                                    <button type="submit" class="btn btn-danger">Remove</button>
+                                  </form>
+                                </div>
+                              </div>
+                              <div class="admin-reservation__info">
+                                <span><%= reservation.email %></span>
+                                <% if (reservation.phone) { %>
+                                  <span><%= reservation.phone %></span>
+                                <% } %>
+                                <% if (reservation.reservation_note) { %>
+                                  <span class="admin-reservation__note">Dish: <%= reservation.reservation_note %></span>
+                                <% } %>
                               </div>
                             </li>
 

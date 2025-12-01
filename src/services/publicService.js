@@ -106,8 +106,21 @@ function normalizeDishNote(value) {
 function getEventDetailsForPublic(eventId) {
   const rows = dal.public.getEventForPublic(eventId);
   const event = mapEventRows(rows);
+  return enrichPotluckDishNotes(event, eventId);
+}
+
+/**
+ * Admin-only preview: load event details even when not published.
+ * Uses admin DAL join and maps to the public structure so the same template renders.
+ */
+function getEventDetailsForPreview(eventId) {
+  const rows = dal.admin.getEventById(eventId);
+  const event = mapEventRows(rows);
+  return event;
+}
+
+function enrichPotluckDishNotes(event, eventId) {
   try {
-    // Enrich dish notes with short names when available (potluck only)
     if (event && String(event.signup_mode) === 'potluck') {
       const pairs = dal.public.getDishNotesWithNamesForEvent(Number(eventId));
       const byBlock = new Map();
@@ -115,7 +128,9 @@ function getEventDetailsForPublic(eventId) {
         const list = byBlock.get(p.block_id) || [];
         const name = (p.name || '').trim();
         const parts = name.split(/\s+/).filter(Boolean);
-        const short = parts.length ? (parts[0] + (parts.length > 1 ? ' ' + parts[parts.length - 1].charAt(0).toUpperCase() + '.' : '')) : '';
+        const short = parts.length
+          ? parts[0] + (parts.length > 1 ? ' ' + parts[parts.length - 1].charAt(0).toUpperCase() + '.' : '')
+          : '';
         list.push({ text: (p.note || '').trim(), by: short });
         byBlock.set(p.block_id, list);
       });
@@ -127,19 +142,8 @@ function getEventDetailsForPublic(eventId) {
       });
     }
   } catch (e) {
-    // Non-fatal: fall back to plain notes
     console.warn('[PublicService] Failed to enrich dish notes with names:', e && e.message);
   }
-  return event;
-}
-
-/**
- * Admin-only preview: load event details even when not published.
- * Uses admin DAL join and maps to the public structure so the same template renders.
- */
-function getEventDetailsForPreview(eventId) {
-  const rows = dal.admin.getEventById(eventId);
-  const event = mapEventRows(rows);
   return event;
 }
 
@@ -200,6 +204,18 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
   const supportName = branding.supportContactName || branding.orgName || 'Our team';
   const supportEmail = branding.supportContactEmail;
   const supportPhone = branding.supportContactPhone;
+  const supportContactHtml = (() => {
+    if (!supportEmail && !supportPhone) {
+      return 'Reply to this email and we will help you.';
+    }
+    const emailHtml = supportEmail
+      ? ` at <a href="mailto:${supportEmail}" style="color:#2563eb; font-weight:600;">${supportEmail}</a>`
+      : '';
+    const phoneHtml = supportPhone
+      ? `${supportEmail ? ' or call ' : ' at '}<a href="tel:${supportPhone.replace(/\D+/g, '')}" style="color:#2563eb; font-weight:600;">${supportPhone}</a>`
+      : '';
+    return `Reach out${emailHtml}${phoneHtml}.`;
+  })();
 
   const isPotluckEmail = String(event && event.signup_mode || '').toLowerCase() === 'potluck';
   const subject = isPotluckEmail
@@ -333,11 +349,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
                         <tr>
                           <td style="font-family:'Segoe UI', Arial, sans-serif;">
                             <p style="margin:0 0 12px; font-weight:600; color:#0f172a;">Need a hand?</p>
-                            <p style="margin:0; color:#475569; line-height:1.7;">Our team is here to help with any changes or questions. ${
-                              supportEmail || supportPhone
-                                ? `Reach out${supportEmail ? ' at <a href="mailto:${supportEmail}" style="color:#2563eb; font-weight:600;">${supportEmail}</a>' : ''}${supportPhone ? (supportEmail ? ' or call ' : ' at ') + '<a href="tel:' + supportPhone.replace(/\\D+/g, '') + '" style="color:#2563eb; font-weight:600;">' + supportPhone + '</a>' : ''}.`
-                                : 'Reply to this email and we will help you.'
-                            }</p>
+                            <p style="margin:0; color:#475569; line-height:1.7;">Our team is here to help with any changes or questions. ${supportContactHtml}</p>
                           </td>
                         </tr>
                       </table>
@@ -475,7 +487,7 @@ function getManageContext(token) {
   }
 
   const eventRows = dal.admin.getEventById(tokenRow.event_id);
-  const event = mapEventRows(eventRows);
+  const event = enrichPotluckDishNotes(mapEventRows(eventRows), tokenRow.event_id);
   if (!event) return null;
 
   const reservations = dal.public.getVolunteerReservationsForEvent(tokenRow.volunteer_id, tokenRow.event_id)

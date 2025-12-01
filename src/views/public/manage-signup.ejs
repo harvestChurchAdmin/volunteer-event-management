@@ -1,42 +1,50 @@
 <%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
 
+<% const { fmt12 } = helpers; %>
+<% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
+<% const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {}); %>
+<% const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0); %>
+<% const brandInfo = locals.brand || {}; %>
+<% const supportEmail = brandInfo.supportContactEmail || ''; %>
+<% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
+<% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
+
 <section class="page-header page-shell">
   <div>
-    <a href="/events" class="btn-link">&larr; Back to events</a>
+    <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
     <h1>Manage your sign-up for <%= event.name %></h1>
-    <p class="page-subtitle">Update or cancel your selections below and click “Save changes” when you are done.</p>
+    <% if (_same) { %>
+      <p class="page-subtitle"><%= _s.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) %> — <%= _s.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %> to <%= _e.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %></p>
+    <% } else { %>
+      <p class="page-subtitle"><%= fmt12(event.date_start) %> — <%= fmt12(event.date_end) %></p>
+    <% } %>
+  </div>
+  <div class="page-header__actions">
+    <a href="/events/<%= event.event_id %>" class="btn btn-accent small">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 19l-7-7 7-7v4h9v6h-9v4z"/></svg>
+      View event page
+    </a>
   </div>
 </section>
 
-<% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
 <section class="page-section page-shell">
-  <% if (messages.error && messages.error.length) { %>
-    <div class="notice-wrapper">
-      <section class="notice notice--error" role="alert">
-        <p class="notice__title">We hit a snag:</p>
-        <ul class="notice__list">
-          <% messages.error.forEach(msg => { %>
-            <li><%= msg %></li>
-          <% }) %>
-        </ul>
-      </section>
-    </div>
-  <% } %>
   <article class="card card--plain">
-    <% if (messages.success && messages.success.length) { %>
-      <section class="notice notice--success" role="status" style="margin-bottom:1rem;">
-        <ul class="notice__list">
-          <% messages.success.forEach(msg => { %>
-            <li><%= msg %></li>
-          <% }) %>
-        </ul>
-      </section>
+    <% if (event.description) { %>
+      <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
+    <% } else { %>
+      <p class="muted"><%= isPotluck ? 'Review your potluck items below.' : 'Review the stations and times below, then update your selections as needed.' %></p>
     <% } %>
-    <p>Event runs from <strong><%= helpers.fmt12(event.date_start) %></strong> to <strong><%= helpers.fmt12(event.date_end) %></strong>.</p>
-    <p class="muted">Your confirmation email contains this page’s link if you need it later.</p>
+    <p class="muted">Update or remove your selections using the list below, then choose "Save changes" to send yourself a confirmation email.</p>
+    <p class="muted small">
+      Need instructions? <a href="/help">Open the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>. If you are stuck, reply to your confirmation email.<% } %>
+    </p>
+    <p class="muted small">Your confirmation email contains this page’s link if you need it later.</p>
   </article>
 </section>
 
+<%- include('../partials/messages') %>
+
+<% if (hasTimeBlocks) { %>
 <section class="page-section page-shell">
   <% if (!isPotluck) { %>
     <div class="slot-toolbar">
@@ -56,7 +64,7 @@
   <div id="slots-by-station" class="slot-view slot-view--station">
     <h3 class="step-heading"><%= isPotluck ? 'Step 1: Review items' : 'Step 1: Review opportunities' %></h3>
     <div class="station-grid">
-      <% event.stations.forEach(station => { %>
+      <% stations.forEach(station => { %>
         <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
         <% if (blocks.length > 0) { %>
           <article class="card station-card">
@@ -120,6 +128,11 @@
                       <span class="muted"> • Slots: <%= block.capacity_needed %></span>
                     <% } %>
                     <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
+                    <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
+                    <div class="time-block-item__hint">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
+                      Click "Select" to <%= isPotluck ? 'update this item' : 'update this time block' %>.
+                    </div>
                   </div>
                   <% if (isPotluck) { %>
                     <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
@@ -139,7 +152,6 @@
                       <% } %>
                     </div>
                   <% } %>
-                  <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
                   <div class="time-block-item__action">
                     <% if (block.is_full && !isSelected) { %>
                       <span class="badge">Full</span>
@@ -156,6 +168,18 @@
     </div>
   </div>
 </section>
+
+<% } else { %>
+  <section class="page-section page-shell">
+    <article class="card card--plain empty-state">
+      <h2>No sign-ups available</h2>
+      <p class="muted">We couldn’t find any sign-up opportunities for this event right now. Reach out to the coordinator if you need assistance.</p>
+      <div class="action-row">
+        <a class="btn btn-ghost" href="/events">Back to sign-ups</a>
+      </div>
+    </article>
+  </section>
+<% } %>
 
 <section class="page-section page-shell">
   <% if (isPotluck) { %>

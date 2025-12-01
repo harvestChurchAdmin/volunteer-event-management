@@ -28,7 +28,15 @@ exports.showEventsList = (req, res, next) => {
             // If there are no published events, render a friendly landing page
             return res.render('public/no-events', { title: 'No Volunteer Opportunities' });
         }
-        res.render('public/events-list', { title: 'Upcoming Events', events, helpers });
+        const sortedEvents = events.slice().sort((a, b) => {
+            const at = new Date(a.date_start).getTime();
+            const bt = new Date(b.date_start).getTime();
+            if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+            if (Number.isNaN(at)) return 1;
+            if (Number.isNaN(bt)) return -1;
+            return at - bt;
+        });
+        res.render('public/events-list', { title: 'Upcoming Events', events: sortedEvents, helpers });
     } catch (error) { 
         console.error("--- ERROR IN showEventsList Controller ---", error);
         next(error); 

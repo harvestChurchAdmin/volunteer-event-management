@@ -364,18 +364,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSelectionFabVisibility() {
       if (!selectionFab) return;
+      const hasSelections = selectedSlots.length > 0;
+      const shouldEnable = isManageMode || hasSelections;
+      if (!shouldEnable) {
+        try {
+          if (selectionFab.contains(document.activeElement) && document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+          }
+        } catch (_) {}
+        selectionFab.classList.remove('is-visible');
+        selectionFab.hidden = true;
+        selectionFab.setAttribute('aria-hidden', 'true');
+        return;
+      }
+
       let shouldShow = false;
-      if (selectedSlots.length > 0) {
-        if (isPotluck) {
-          // Show while no dish input is visible
-          const firstDish = document.querySelector('#selected-slots-container input[id^="dish-note-"]');
+      if (isPotluck) {
+        const firstDish = document.querySelector('#selected-slots-container input[id^="dish-note-"]');
+        if (firstDish) {
           shouldShow = !isInViewport(firstDish);
-        } else {
-          // Show while form (contact info) is not visible
+        } else if (signupFormContainer) {
           const rect = signupFormContainer.getBoundingClientRect();
-          const formVisible = rect.top < window.innerHeight && rect.bottom > 0; // any portion visible
+          const formVisible = rect.top < window.innerHeight && rect.bottom > 0;
           shouldShow = !formVisible;
         }
+      } else if (signupFormContainer) {
+        const rect = signupFormContainer.getBoundingClientRect();
+        const formVisible = rect.top < window.innerHeight && rect.bottom > 0; // any portion visible
+        shouldShow = !formVisible;
       }
 
       if (shouldShow) {

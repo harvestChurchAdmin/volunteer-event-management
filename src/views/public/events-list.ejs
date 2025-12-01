@@ -25,7 +25,6 @@
       <% const timeOnly = (d) => new Date(d).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); %>
       <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
       <% const heroLabel = isPotluck ? 'Potluck event' : 'Volunteer event'; %>
-      <% const heroDesc = isPotluck ? 'Sign up to contribute a dish or item.' : 'Pick a time slot to lend a hand.'; %>
       <% const heroIcon = isPotluck ? '/img/event-icon-potluck.svg' : '/img/event-icon-volunteer.svg'; %>
       <% const metaClasses = ['event-card__meta', isPotluck ? 'event-card__meta--potluck' : '', sameDay ? '' : 'event-card__meta--multiday'].filter(Boolean).join(' '); %>
       <% const startDateLabel = start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); %>
@@ -37,9 +36,14 @@
           <span class="event-card__hero-icon" aria-hidden="true">
             <img src="<%= heroIcon %>" alt="" loading="lazy" decoding="async">
           </span>
-          <div>
+          <div class="event-card__hero-content">
             <p class="event-card__hero-label"><%= heroLabel %></p>
-            <p class="event-card__hero-desc"><%= heroDesc %></p>
+            <h2 class="event-card__title"><%= event.name %></h2>
+            <% if (event.description) { %>
+              <div class="event-card__hero-text rich-text"><%- helpers.renderRichText(event.description) %></div>
+            <% } else { %>
+              <p class="event-card__hero-text"><%= isPotluck ? 'Sign up to contribute a dish or item.' : 'Pick a time slot to lend a hand.' %></p>
+            <% } %>
           </div>
         </div>
         <div class="<%= metaClasses %>">
@@ -59,12 +63,6 @@
               <p class="event-card__time">Ends <time datetime="<%= endISO %>"><%= endDateLabel %> · <%= timeOnly(end) %></time></p>
             <% } %>
           </div>
-        </div>
-        <div class="event-card__body">
-          <h2><%= event.name %></h2>
-          <% if (event.description) { %>
-            <div class="event-card__copy rich-text"><%- helpers.renderRichText(event.description) %></div>
-          <% } %>
         </div>
         <div class="card-actions">
           <a href="/events/<%= event.event_id %>" class="btn btn-primary"><%= isPotluck ? 'Sign Up to Bring a Dish' : 'View sign-ups' %></a>

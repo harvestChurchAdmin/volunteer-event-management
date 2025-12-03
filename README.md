@@ -41,6 +41,7 @@ Key settings (see `.env.example` for defaults and documentation):
 | `BRAND_FAVICON_URL` | Optional favicon image (absolute URL or a path like `/favicon.ico`). See Favicon below. |
 | `BRAND_HOME_PATH` | Path the brand link should point to (defaults to `/`). |
 | `SUPPORT_CONTACT_NAME` / `SUPPORT_CONTACT_EMAIL` / `SUPPORT_CONTACT_PHONE` | Contact info shown in public help pages and emails. |
+| `ORG_MAILING_ADDRESS` | Physical mailing address surfaced in transactional email footers for compliance. |
 | `APP_BASE_URL` | Public origin used for OAuth callbacks and email links. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth credentials for admin login. |
 | `GOOGLE_WORKSPACE_DOMAIN` | Limits admin access to a specific Google Workspace domain. |
@@ -64,6 +65,13 @@ You can swap `MAIL_SERVICE` for direct SMTP settings (`MAIL_HOST`, `MAIL_PORT`, 
 - CSRF protection is enforced on all non-GET requests. Server-rendered forms now include `_csrf` and XHR calls must send the `CSRF-Token` header.
 - Volunteer manage links are hashed at rest and carry expirations (`MANAGE_TOKEN_TTL_DAYS`); new links are issued on every reminder/update.
 - CSV exports neutralize formula injection so malicious values cannot execute when opened in spreadsheet tools.
+
+## Email & CASL compliance
+
+- Transactional emails (signup confirmations, manage-link reminders) now identify your organization, include the mailing address (`ORG_MAILING_ADDRESS`), and surface a "Manage email preferences" link plus `List-Unsubscribe` headers.
+- Every volunteer manage page exposes a dedicated Email Preferences card where people can unsubscribe or resume confirmations without contacting an admin.
+- Opt-out reasons are stored alongside each volunteer record so admins have traceability, and opted-out contacts no longer receive automatic confirmations until they explicitly resubscribe.
+- Volunteers may still request a one-off manage link even while unsubscribed so they can adjust reservations without re-enabling bulk messages.
 
 ## Project Layout
 

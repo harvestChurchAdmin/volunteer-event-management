@@ -92,6 +92,8 @@ router.post(
   publicController.updateManageSignup
 );
 
+router.post('/manage/:token/preferences', publicController.updateEmailPreference);
+
 // --- CRITICAL FIX ---
 // Signup submission endpoint. It is now a single, clean route.
 // The eventId and blockIds are now passed in the request body, not as URL params.

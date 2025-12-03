@@ -198,6 +198,8 @@ function resolveSupportContact() {
   const supportName = branding.supportContactName || branding.orgName || 'Our team';
   const supportEmail = branding.supportContactEmail;
   const supportPhone = branding.supportContactPhone;
+  const orgName = branding.orgName || supportName;
+  const orgMailingAddress = branding.mailingAddress || '';
   const supportContactHtml = (() => {
     if (!supportEmail && !supportPhone) {
       return 'Reply to this email and we will help you.';
@@ -205,12 +207,80 @@ function resolveSupportContact() {
     const emailHtml = supportEmail
       ? ` at <a href="mailto:${supportEmail}" style="color:#2563eb; font-weight:600;">${supportEmail}</a>`
       : '';
+    const sanitizedPhone = supportPhone ? supportPhone.replace(/[^0-9+]/g, '') : '';
     const phoneHtml = supportPhone
-      ? `${supportEmail ? ' or call ' : ' at '}<a href="tel:${supportPhone.replace(/\D+/g, '')}" style="color:#2563eb; font-weight:600;">${supportPhone}</a>`
+      ? `${supportEmail ? ' or call ' : ' at '}<a href="tel:${sanitizedPhone}" style="color:#2563eb; font-weight:600;">${supportPhone}</a>`
       : '';
     return `Reach out${emailHtml}${phoneHtml}.`;
   })();
-  return { supportName, supportEmail, supportPhone, supportContactHtml };
+  return { supportName, supportEmail, supportPhone, supportContactHtml, orgName, orgMailingAddress };
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeAddressLines(address) {
+  if (!address) return [];
+  return String(address)
+    .split(/\r?\n+/)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+function buildComplianceFooter({ orgName, supportEmail, supportPhone, mailingAddress, manageUrl }) {
+  const safeOrg = orgName || 'Volunteer Team';
+  const contactParts = [`Sent by ${safeOrg}`];
+  if (supportEmail) contactParts.push(`Email: ${supportEmail}`);
+  if (supportPhone) contactParts.push(`Phone: ${supportPhone}`);
+
+  const textLines = contactParts.length ? [contactParts.join(' | ')] : [];
+  const addressLines = normalizeAddressLines(mailingAddress);
+  if (addressLines.length) {
+    textLines.push(`Mailing address: ${addressLines.join(', ')}`);
+  }
+
+  const unsubscribeUrl = manageUrl ? `${manageUrl}#email-preferences` : '';
+  if (unsubscribeUrl) {
+    textLines.push(`Manage your volunteer email preferences: ${unsubscribeUrl}`);
+  }
+
+  const linkColor = '#2563eb';
+  const htmlSections = [];
+  const contactHtmlParts = [`Sent by <strong>${escapeHtml(safeOrg)}</strong>`];
+  if (supportEmail) {
+    contactHtmlParts.push(`Email: <a href="mailto:${escapeHtml(supportEmail)}" style="color:${linkColor};">${escapeHtml(supportEmail)}</a>`);
+  }
+  if (supportPhone) {
+    const telValue = supportPhone.replace(/[^0-9+]/g, '');
+    contactHtmlParts.push(`Phone: <a href="tel:${telValue}" style="color:${linkColor};">${escapeHtml(supportPhone)}</a>`);
+  }
+  htmlSections.push(`<p style="margin:0; color:#475569; font-size:13px;">${contactHtmlParts.join(' &nbsp;&bull;&nbsp; ')}</p>`);
+  if (addressLines.length) {
+    htmlSections.push(`<p style="margin:8px 0 0; color:#94a3b8; font-size:12px;">Mailing address:<br>${addressLines.map(escapeHtml).join('<br />')}</p>`);
+  }
+  if (unsubscribeUrl) {
+    htmlSections.push(`<p style="margin:12px 0 0; font-size:13px; color:#475569;">Manage email preferences: <a href="${unsubscribeUrl}" style="color:${linkColor};">${unsubscribeUrl}</a></p>`);
+  }
+
+  const htmlBlock = `
+    <div style="margin-top:32px; padding:20px 24px; background-color:#f8fafc; border-radius:16px; border:1px solid rgba(15,23,42,0.08);">
+      <p style="margin:0 0 12px; color:#475569; font-size:13px;">You're receiving this email because you registered as a volunteer. You can update your communication preferences anytime.</p>
+      ${htmlSections.join('')}
+    </div>
+  `;
+
+  return {
+    textLines,
+    htmlBlock,
+    unsubscribeUrl,
+    listUnsubscribe: unsubscribeUrl ? `<${unsubscribeUrl}>` : null
+  };
 }
 
 /**
@@ -219,8 +289,12 @@ function resolveSupportContact() {
  */
 async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl, isUpdate }) {
   if (!volunteer.email) return;
+  if (typeof volunteer.email_opt_in !== 'undefined' && Number(volunteer.email_opt_in) === 0) {
+    console.info('[PublicService] Skipping confirmation email to %s (volunteer opted out).', volunteer.email);
+    return;
+  }
 
-  const { supportName, supportEmail, supportPhone, supportContactHtml } = resolveSupportContact();
+  const { supportName, supportEmail, supportPhone, supportContactHtml, orgName, orgMailingAddress } = resolveSupportContact();
 
   const isPotluckEmail = String(event && event.signup_mode || '').toLowerCase() === 'potluck';
   const subject = isPotluckEmail
@@ -234,6 +308,14 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
         return `• ${core}${dish}`;
       }).join('\n')
     : 'You currently have no reserved opportunities.';
+
+  const complianceFooter = buildComplianceFooter({
+    orgName,
+    supportEmail,
+    supportPhone,
+    mailingAddress: orgMailingAddress,
+    manageUrl
+  });
 
   const textLines = (function(){
     const lines = [`Hi ${volunteer.name || volunteer.email},`, ''];
@@ -257,6 +339,9 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
       lines.push('Reply to this email and we will help you.');
     }
     lines.push('', 'With gratitude,', supportName || 'Volunteer Team', '', 'If you did not request this email you can ignore it.');
+    if (complianceFooter.textLines.length) {
+      lines.push('', ...complianceFooter.textLines);
+    }
     return lines;
   })();
 
@@ -359,6 +444,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
                         </tr>
                       </table>
                       <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${supportName || 'Volunteer Team'}</strong></p>
+                      ${complianceFooter.htmlBlock || ''}
                     </td>
                   </tr>
                   <tr>
@@ -380,11 +466,13 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
     </html>`;
 
   try {
+    const headers = complianceFooter.listUnsubscribe ? { 'List-Unsubscribe': complianceFooter.listUnsubscribe } : undefined;
     await sendMail({
       to: volunteer.email,
       subject,
       text,
-      html
+      html,
+      headers
     });
   } catch (err) {
     console.error('Failed to send volunteer confirmation email:', err);
@@ -452,14 +540,21 @@ async function processVolunteerSignup(volunteerData, blockIds, notesMap) {
 
   const reservations = dal.public.getVolunteerReservationsForEvent(result.volunteerId, result.eventId).map(formatReservationRow);
 
+  const volunteerProfile = dal.public.getVolunteerById(result.volunteerId) || null;
+  const emailOptInValue = volunteerProfile && typeof volunteerProfile.email_opt_in !== 'undefined'
+    ? volunteerProfile.email_opt_in
+    : 1;
+  const volunteerForEmail = {
+    name: (volunteerProfile && volunteerProfile.name) || volunteerData.name.trim(),
+    email: (volunteerProfile && volunteerProfile.email) || volunteerData.email.trim(),
+    email_opt_in: emailOptInValue
+  };
+
   const token = issueManageToken(result.volunteerId, result.eventId);
   const manageUrl = buildManageUrl(token);
 
   await sendConfirmationEmail({
-    volunteer: {
-      name: volunteerData.name.trim(),
-      email: volunteerData.email.trim()
-    },
+    volunteer: volunteerForEmail,
     event,
     reservations,
     manageUrl,
@@ -550,7 +645,8 @@ async function updateVolunteerSignup(token, blockIds, notesMap) {
   await sendConfirmationEmail({
     volunteer: {
       name: context.token.volunteer_name,
-      email: context.token.volunteer_email
+      email: context.token.volunteer_email,
+      email_opt_in: context.token.email_opt_in
     },
     event,
     reservations: updatedReservations,
@@ -582,12 +678,20 @@ async function sendManageReminder(email, eventId) {
   }
   const token = issueManageToken(v.volunteer_id, Number(eventId));
   const manageUrl = buildManageUrl(token);
-  const { supportName, supportEmail, supportPhone, supportContactHtml } = resolveSupportContact();
+  const { supportName, supportEmail, supportPhone, supportContactHtml, orgName, orgMailingAddress } = resolveSupportContact();
   const greetingName = v.name || inputEmail;
   const subject = `Manage your signup for ${event.name}`;
+  const isOptedOut = Number(v.email_opt_in) === 0;
   const contactLines = [];
   if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
   if (supportPhone) contactLines.push(`Phone: ${supportPhone}`);
+  const complianceFooter = buildComplianceFooter({
+    orgName,
+    supportEmail,
+    supportPhone,
+    mailingAddress: orgMailingAddress,
+    manageUrl
+  });
   const textParts = [
     `Hi ${greetingName},`,
     '',
@@ -595,12 +699,18 @@ async function sendManageReminder(email, eventId) {
     '',
     manageUrl
   ];
+  if (isOptedOut) {
+    textParts.push('', 'You’re currently unsubscribed from volunteer reminder emails. We’re sending this manage link because you requested it. Update your preference on the manage page if you’d like to resume confirmations.');
+  }
   if (contactLines.length) {
     textParts.push('', 'Need help? Contact us:', ...contactLines);
   } else {
     textParts.push('', 'Need help? Reply to this email and we will help you.');
   }
   textParts.push('', 'With gratitude,', supportName || 'Volunteer Team', '', 'If you did not request this email you can ignore it.');
+  if (complianceFooter.textLines.length) {
+    textParts.push('', ...complianceFooter.textLines);
+  }
   const text = textParts.join('\n');
   const html = `<!DOCTYPE html>
     <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -640,6 +750,7 @@ async function sendManageReminder(email, eventId) {
                     <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
                       <p style="margin:0 0 16px; font-size:16px;">Hi ${greetingName},</p>
                       <p style="margin:0 0 24px; color:#475569; line-height:1.7;">Use the button below to access your personal manage page.</p>
+                      ${isOptedOut ? '<p style="margin:0 0 24px; color:#475569; line-height:1.7;">You&rsquo;re currently unsubscribed from automated volunteer reminders. This manage link was sent because you requested it. Update your preference after opening the link if you would like to resume confirmations.</p>' : ''}
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px;">
                         <tr>
                           <td align="center" role="presentation">
@@ -670,6 +781,7 @@ async function sendManageReminder(email, eventId) {
                         </tr>
                       </table>
                       <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${supportName || 'Volunteer Team'}</strong></p>
+                      ${complianceFooter.htmlBlock || ''}
                     </td>
                   </tr>
                   <tr>
@@ -690,10 +802,47 @@ async function sendManageReminder(email, eventId) {
       </body>
     </html>`;
   try {
-    await sendMail({ to: v.email, subject, text, html });
+    const headers = complianceFooter.listUnsubscribe ? { 'List-Unsubscribe': complianceFooter.listUnsubscribe } : undefined;
+    await sendMail({ to: v.email, subject, text, html, headers });
   } catch (err) {
     console.error('Failed to send manage reminder email:', err);
   }
+}
+
+async function updateEmailPreference(tokenValue, preference, reason) {
+  if (!tokenValue) {
+    throw createError(400, 'Missing management token.');
+  }
+  const tokenRow = dal.public.getVolunteerToken(tokenValue);
+  if (!tokenRow) {
+    throw createError(410, 'This manage link expired. Please request a new one.');
+  }
+
+  const normalized = String(preference || '').toLowerCase();
+  let shouldOptIn;
+  if (['opt-in', 'subscribe', 'resubscribe', 'enable', 'allow'].includes(normalized)) {
+    shouldOptIn = true;
+  } else if (['opt-out', 'unsubscribe', 'stop', 'disable', 'remove'].includes(normalized)) {
+    shouldOptIn = false;
+  } else {
+    throw createError(400, 'Choose a valid email preference option.');
+  }
+
+  const reasonClean = shouldOptIn ? null : (typeof reason === 'string' ? reason.trim().slice(0, 500) : null);
+  dal.public.setVolunteerEmailPreference(tokenRow.volunteer_id, {
+    optIn: shouldOptIn,
+    reason: reasonClean
+  });
+
+  return {
+    optedIn: shouldOptIn,
+    volunteer: {
+      id: tokenRow.volunteer_id,
+      email: tokenRow.volunteer_email,
+      name: tokenRow.volunteer_name
+    },
+    eventId: tokenRow.event_id
+  };
 }
 
 module.exports = {
@@ -703,5 +852,6 @@ module.exports = {
   processVolunteerSignup,
   getManageContext,
   updateVolunteerSignup,
-  sendManageReminder
+  sendManageReminder,
+  updateEmailPreference
 };

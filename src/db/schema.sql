@@ -36,7 +36,10 @@ CREATE TABLE IF NOT EXISTS volunteers (
     volunteer_id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    phone_number TEXT
+    phone_number TEXT,
+    email_opt_in INTEGER NOT NULL DEFAULT 1,
+    email_opted_out_at TEXT,
+    email_opt_out_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_volunteers_email ON volunteers(email);
 

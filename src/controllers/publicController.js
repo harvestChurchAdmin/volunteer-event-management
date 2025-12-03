@@ -194,6 +194,12 @@ exports.showManageSignup = (req, res, next) => {
 
         const { event, reservations } = context;
         const selectedBlockIds = reservations.map(r => r.block_id);
+        const emailPreferences = {
+            optIn: Number(context.token.email_opt_in ?? 1) !== 0,
+            optedOutAt: context.token.email_opted_out_at || null,
+            optedOutReason: context.token.email_opt_out_reason || null,
+            volunteerEmail: context.token.volunteer_email || ''
+        };
 
         // Do not pass messages here; app middleware already exposed res.locals.messages
         // Passing messages: req.flash() would consume and clear success flashes before render.
@@ -203,7 +209,8 @@ exports.showManageSignup = (req, res, next) => {
             token,
             reservations,
             selectedBlockIds,
-            helpers
+            helpers,
+            emailPreferences
         });
     } catch (error) {
         console.error('--- ERROR IN showManageSignup ---', error);
@@ -241,6 +248,28 @@ exports.updateManageSignup = async (req, res, next) => {
         }
         res.redirect(`/manage/${token}`);
     }
+};
+
+exports.updateEmailPreference = async (req, res) => {
+  const token = req.params.token;
+  const preference = req.body.preference;
+  const reason = typeof req.body.reason === 'string' ? req.body.reason : '';
+  try {
+    const result = await publicService.updateEmailPreference(token, preference, reason);
+    if (result.optedIn) {
+      req.flash('success', 'Volunteer emails have been resumed for this contact.');
+    } else {
+      req.flash('success', 'You have unsubscribed from future volunteer emails.');
+    }
+    return res.redirect(`/manage/${token}#email-preferences`);
+  } catch (error) {
+    console.error('--- ERROR IN updateEmailPreference ---', error);
+    req.flash('error', error.message || 'Unable to update email preferences.');
+    if (error.status === 410) {
+      return res.redirect('/events');
+    }
+    return res.redirect(`/manage/${token}`);
+  }
 };
 
 // Sends a manage-link reminder email if a volunteer signup exists for the

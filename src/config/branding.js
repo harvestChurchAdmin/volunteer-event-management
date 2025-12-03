@@ -27,6 +27,7 @@ function getBranding() {
   const supportContactName = clean(process.env.SUPPORT_CONTACT_NAME) || orgName;
   const supportContactEmail = clean(process.env.SUPPORT_CONTACT_EMAIL) || '';
   const supportContactPhone = clean(process.env.SUPPORT_CONTACT_PHONE) || '';
+  const mailingAddress = clean(process.env.ORG_MAILING_ADDRESS) || '';
 
   return {
     appName,
@@ -42,6 +43,7 @@ function getBranding() {
     supportContactName,
     supportContactEmail,
     supportContactPhone,
+    mailingAddress,
   };
 }
 

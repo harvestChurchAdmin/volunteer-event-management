@@ -71,6 +71,17 @@ try {
   db.prepare(`ALTER TABLE reservations ADD COLUMN note TEXT`).run();
 } catch (_) { /* already exists */ }
 
+// Track email consent/unsubscribe state for CASL compliance
+try {
+  db.prepare(`ALTER TABLE volunteers ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 1`).run();
+} catch (_) { /* already exists */ }
+try {
+  db.prepare(`ALTER TABLE volunteers ADD COLUMN email_opted_out_at TEXT`).run();
+} catch (_) { /* already exists */ }
+try {
+  db.prepare(`ALTER TABLE volunteers ADD COLUMN email_opt_out_reason TEXT`).run();
+} catch (_) { /* already exists */ }
+
 /**
  * Convert the better-sqlite3 metadata into a simpler object that callers can
  * rely on. This keeps service code tidy and testable.
@@ -606,6 +617,14 @@ const publicDal = {
     return undefined;
   },
 
+  getVolunteerById: (volunteerId) => {
+    try {
+      return db.prepare(`SELECT * FROM volunteers WHERE volunteer_id = ?`).get(volunteerId);
+    } catch (_) {
+      return undefined;
+    }
+  },
+
   createVolunteer: (name, email, phone) => {
     try {
       const res = db.prepare(`
@@ -728,6 +747,16 @@ const publicDal = {
     return token;
   },
 
+  setVolunteerEmailPreference: (volunteerId, opts = {}) => {
+    if (!volunteerId) return;
+    const reason = typeof opts.reason === 'string' && opts.reason.trim().length ? opts.reason.trim().slice(0, 500) : null;
+    if (opts.optIn) {
+      db.prepare(`UPDATE volunteers SET email_opt_in = 1, email_opted_out_at = NULL, email_opt_out_reason = NULL WHERE volunteer_id = ?`).run(volunteerId);
+    } else {
+      db.prepare(`UPDATE volunteers SET email_opt_in = 0, email_opted_out_at = datetime('now'), email_opt_out_reason = ? WHERE volunteer_id = ?`).run(reason, volunteerId);
+    }
+  },
+
   getVolunteerToken: (token) => {
     cleanupExpiredTokens();
     const hashed = hashToken(token);
@@ -740,6 +769,9 @@ const publicDal = {
         v.name AS volunteer_name,
         v.email AS volunteer_email,
         v.phone_number AS volunteer_phone,
+        COALESCE(v.email_opt_in, 1) AS email_opt_in,
+        v.email_opted_out_at,
+        v.email_opt_out_reason,
         e.name AS event_name,
         e.date_start,
         e.date_end,
@@ -761,6 +793,9 @@ const publicDal = {
         v.name AS volunteer_name,
         v.email AS volunteer_email,
         v.phone_number AS volunteer_phone,
+        COALESCE(v.email_opt_in, 1) AS email_opt_in,
+        v.email_opted_out_at,
+        v.email_opt_out_reason,
         e.name AS event_name,
         e.date_start,
         e.date_end,

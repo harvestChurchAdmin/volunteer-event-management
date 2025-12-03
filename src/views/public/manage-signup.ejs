@@ -7,6 +7,7 @@
 <% const brandInfo = locals.brand || {}; %>
 <% const supportEmail = brandInfo.supportContactEmail || ''; %>
 <% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
+<% const emailPrefs = (typeof emailPreferences !== 'undefined' && emailPreferences) ? emailPreferences : { optIn: true, volunteerEmail: '' }; %>
 <% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
 
 <section class="page-header page-shell">
@@ -200,6 +201,46 @@
       </div>
     </form>
   </div>
+</section>
+
+<section class="page-section page-shell email-pref-section" id="email-preferences">
+  <h3 class="step-heading">Email preferences</h3>
+  <article class="card card--plain email-pref-card">
+    <div class="email-pref-status">
+      <% if (emailPrefs.optIn) { %>
+        <span class="status-pill status-pill--on">Subscribed</span>
+        <p class="muted">We send confirmations and reminders to <strong><%= emailPrefs.volunteerEmail || 'your email address' %></strong>.</p>
+      <% } else { %>
+        <span class="status-pill status-pill--off">Unsubscribed</span>
+        <p class="muted">
+          You are not receiving automated volunteer emails<% if (emailPrefs.volunteerEmail) { %> at <strong><%= emailPrefs.volunteerEmail %></strong><% } %>.
+          <% if (emailPrefs.optedOutAt) { %>Last updated on <%= fmt12(emailPrefs.optedOutAt) %>.<% } %>
+        </p>
+      <% } %>
+    </div>
+    <p class="muted small">These messages include schedule confirmations and reminders required for event coordination. You can unsubscribe at any time.</p>
+    <% if (emailPrefs.optIn) { %>
+      <form action="/manage/<%= token %>/preferences" method="POST" class="email-pref-form">
+        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+        <input type="hidden" name="preference" value="opt-out">
+        <label class="form-label" for="pref-reason">Optional feedback</label>
+        <textarea id="pref-reason" name="reason" rows="3" placeholder="Let us know why you no longer wish to receive volunteer emails (optional)"></textarea>
+        <p class="muted small">Stopping emails means you won’t receive automatic confirmations for future changes.</p>
+        <div class="card-actions">
+          <button type="submit" class="btn btn-danger">Stop volunteer emails</button>
+        </div>
+      </form>
+    <% } else { %>
+      <form action="/manage/<%= token %>/preferences" method="POST" class="email-pref-form">
+        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+        <input type="hidden" name="preference" value="opt-in">
+        <p class="muted small">Turn confirmations back on so we can notify you whenever your schedule changes.</p>
+        <div class="card-actions">
+          <button type="submit" class="btn btn-primary">Resume volunteer emails</button>
+        </div>
+      </form>
+    <% } %>
+  </article>
 </section>
 
 <div id="selection-fab" class="selection-fab" hidden>

@@ -8,7 +8,7 @@ Express + SQLite tooling for scheduling volunteers at church or community events
 - **SQLite** persistence through a thin Data Access Layer (`src/db/dal.js`).
 - **Modular architecture**: controllers defer to services, services to the DAL.
 - **Server-side rendered UI** using EJS templates with lightweight client scripts.
-- **Two sign-up modes**: schedule (stations + time blocks) and potluck (categories + items with required dish names and “Others bringing” guidance).
+- **Two sign-up modes**: schedule (stations + time blocks) and food prep (potluck-style categories + items with required dish names and “Others signed up” guidance).
 - **Email notifications** powered by configurable SMTP or Gmail service accounts.
 
 ## Getting Started
@@ -23,7 +23,7 @@ Visit `http://localhost:3002` by default. The admin dashboard lives under `/admi
 
 Public page quick tour:
 - Schedule mode: Step 1 “Select opportunities” → Step 2 “Review selections” (read‑only summary) → Step 3 “Enter contact info”.
-- Potluck mode: Step 1 “Select items” → Step 2 “Enter dish names” (required for each selection) → Step 3 “Enter contact info”.
+- Food prep mode: Step 1 “Select items” → Step 2 “Enter dish names” (required for each selection) → Step 3 “Enter contact info”.
 
 ## Environment Variables
 
@@ -77,8 +77,8 @@ You can swap `MAIL_SERVICE` for direct SMTP settings (`MAIL_HOST`, `MAIL_PORT`, 
 ## Admin Workflow Overview
 
 1. **Dashboard** – Create events, view existing entries (newest first), and quickly see which events are in the past (dimmed rows with a “Past event” label).
-2. **Stations / Categories** – For each event define stations (schedule mode) or potluck categories (potluck mode).
-3. **Time Blocks / Items** – Add time blocks with start/end times and capacity targets, or potluck items with optional “feeds” ranges.
+2. **Stations / Categories** – For each event define stations (schedule mode) or food prep categories (potluck signup mode).
+3. **Time Blocks / Items** – Add time blocks with start/end times and capacity targets, or food prep items with optional “feeds” ranges.
 4. **Reservations** – Add volunteers directly or review sign-ups, edit/move/remove as needed.
 5. **Publish** – Toggle visibility to push an event live on the volunteer sign-up page. The publish widget now shows an inline “Copy link” action so admins can grab the private/public URL without opening a modal.
 
@@ -94,7 +94,7 @@ Drag-and-drop ordering plus local storage persists station layout preferences fo
 
 - Run `npm test` for smoke coverage of the volunteer picker flow. This suite combines fast JS‑DOM tests (services/helpers) and a Puppeteer smoke that clicks through `src/public/test-picker.html` to exercise the datetime picker and modal behaviours in a real browser context.
 - `helpers.test.js` provides regression coverage for the shared rendering helpers.
-- `potluck-jsdom.test.js` validates the potluck selection flow: a “Select” click requires dish names and produces the hidden inputs posted back to the server.
+- `potluck-jsdom.test.js` validates the food prep selection flow: a “Select” click requires dish names and produces the hidden inputs posted back to the server.
 - `picker-smoke.test.js` uses the lightweight `/test-picker.html` harness to confirm the modal, datetime fields, and close behaviours remain accessible.
 - Critical logic in services and the DAL carries inline documentation comments to make future enhancements safer; prefer targeting those layers in new unit tests.
 - When adding features, prefer unit testing services and integration testing controllers/routes.
@@ -123,11 +123,13 @@ Tune the UI via environment variables (no code edits required):
 - `ORG_DISPLAY_NAME`, `ORG_COPYRIGHT_HOLDER` – used in emails and footer
 - `BRAND_LOGO_URL`, `BRAND_FAVICON_URL`, `BRAND_HOME_PATH`, optional colors `BRAND_COLOR`, `BRAND_COLOR_STRONG`, `ACCENT_COLOR`
 
-## Potluck specifics
+## Food prep specifics
+
+This UI is labeled “Food Prep” even though the underlying `signup_mode` value remains `potluck`.
 
 - Items use a “Select” button and always require a “Dish name” entry for every reservation.
-- “Others bringing” shows dish names plus first name + last initial of the contributor; the list truncates to keep cards compact and shows “+N more” when needed.
-- Cards keep a fixed left column for the item name and an aligned right column for “Others bringing”.
+- “Others signed up” shows dish names plus first name + last initial of the contributor; the list truncates to keep cards compact and shows “+N more” when needed.
+- Cards keep a fixed left column for the item name and an aligned right column for the “Others signed up” list.
 - Dish names are normalized on save (trimming whitespace and stripping accidental leading commas), so items like `, Lasagna` are stored and displayed as `Lasagna`.
 
 ## Contributing / GitHub
@@ -135,7 +137,7 @@ Tune the UI via environment variables (no code edits required):
 This repository is ready for GitHub. Include the following when opening PRs:
 
 - Summary of changes and why
-- Manual test notes (schedule + potluck flows)
+- Manual test notes (schedule + food prep flows)
 - Screenshots where UI changed
 - Any migration or environment updates required
 

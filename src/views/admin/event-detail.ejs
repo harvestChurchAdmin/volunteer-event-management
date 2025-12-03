@@ -88,9 +88,9 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
   </div>
   <div class="page-header__primary">
     <h1>
-      <span class="type-icon <%= isPotluck ? 'type-icon--potluck' : 'type-icon--schedule' %>" title="<%= isPotluck ? 'Potluck event' : 'Scheduled event' %>" aria-label="<%= isPotluck ? 'Potluck event' : 'Scheduled event' %>">
+      <span class="type-icon <%= isPotluck ? 'type-icon--potluck' : 'type-icon--schedule' %>" title="<%= isPotluck ? 'Food Prep event' : 'Scheduled event' %>" aria-label="<%= isPotluck ? 'Food Prep event' : 'Scheduled event' %>">
         <% if (isPotluck) { %>
-          <!-- Bowl with steam icon for Potluck -->
+          <!-- Bowl with steam icon for Food Prep -->
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <!-- Steam -->
             <path d="M9 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M12 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M15 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
@@ -770,7 +770,7 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
       <label for="edit-event-signup-mode">Sign-up type</label>
       <select id="edit-event-signup-mode" name="signup_mode">
         <option value="schedule" <%= (String(event.signup_mode||'')==='schedule') ? 'selected' : '' %>>Volunteer schedule (stations &amp; time slots)</option>
-        <option value="potluck" <%= (String(event.signup_mode||'')==='potluck') ? 'selected' : '' %>>Potluck (categories &amp; items, no times)</option>
+        <option value="potluck" <%= (String(event.signup_mode||'')==='potluck') ? 'selected' : '' %>>Food Prep (categories &amp; items, no times)</option>
       </select>
     </div>
   </form>

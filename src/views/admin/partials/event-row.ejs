@@ -1,0 +1,141 @@
+<%
+  const endDate = new Date(event.date_end);
+  const publishState = String(event.publish_state || (event.is_published ? 'published' : 'draft'));
+  const isDraft = publishState === 'draft';
+  const isPrivate = publishState === 'private';
+  const isPublic = publishState === 'published';
+  const statusText = isPublic ? 'Published' : (isPrivate ? 'Private link' : 'Draft');
+  const sortStatus = (isPast ? 'past_' : 'upcoming_') + publishState;
+  const sharePath = '/events/' + event.event_id;
+%>
+<tr class="event-row <%= 'event-row--' + publishState %> <%= isPast ? 'event-row--past' : '' %>"
+    data-event-id="<%= event.event_id %>"
+    data-event-url="/admin/event/<%= event.event_id %>"
+    data-event-name="<%= event.name %>"
+    data-sort-name="<%= (event.name || '').toLowerCase() %>"
+    data-sort-date="<%= event.date_start %>"
+    data-sort-status="<%= sortStatus %>">
+  <td data-th="Type" class="col-type">
+    <span class="type-icon <%= (String(event.signup_mode||'')==='potluck') ? 'type-icon--potluck' : 'type-icon--schedule' %>"
+          title="<%= (String(event.signup_mode||'')==='potluck') ? 'Food Prep event' : 'Scheduled event' %>"
+          aria-label="<%= (String(event.signup_mode||'')==='potluck') ? 'Food Prep event' : 'Scheduled event' %>">
+      <% if (String(event.signup_mode||'')==='potluck') { %>
+        <!-- Bowl with steam icon for Food Prep -->
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <!-- Steam -->
+          <path d="M9 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M12 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M15 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          <!-- Bowl -->
+          <path d="M6 11h12v1.2a5.3 5.3 0 0 1-5.3 5.3H11.3A5.3 5.3 0 0 1 6 12.2V11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      <% } else { %>
+        <!-- Refined calendar icon -->
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3.5v3M16 3.5v3M3.5 10.5h17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      <% } %>
+    </span>
+  </td>
+  <td data-th="Name">
+    <strong><%= event.name %></strong>
+  </td>
+  <td data-th="Dates">
+    <%= new Date(event.date_start).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
+    &nbsp;–&nbsp;
+    <%= new Date(event.date_end).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
+  </td>
+  <td data-th="Status">
+    <span class="status-pill <%= isPublic ? 'status-pill--live' : (isPrivate ? 'status-pill--private' : 'status-pill--draft') %>">
+      <%= statusText %>
+    </span>
+  </td>
+  <td data-th="Actions" class="row-actions">
+    <a href="/admin/event/<%= event.event_id %>" class="btn btn-primary">Manage</a>
+    <details class="dropdown dropdown--float" style="display:inline-block;margin-left:6px;">
+      <summary class="btn btn-accent">Actions</summary>
+      <div class="dropdown__menu dropdown__menu--sections">
+        <div class="dropdown__section" role="group" aria-label="Manage">
+          <p class="dropdown__section-label">Manage</p>
+          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>?edit=1">
+            <span class="dropdown__icon-badge dropdown__icon-badge--primary">
+              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+            </span>
+            <span class="dropdown__link-text">Edit event…</span>
+          </a>
+          <a class="dropdown__link" href="<%= sharePath %>" target="_blank" rel="noopener">
+            <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3Zm5 14v4H5V5h4V3H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4h-2Z"/></svg>
+            </span>
+            <span class="dropdown__link-text">View public page</span>
+          </a>
+        </div>
+        <div class="dropdown__section" role="group" aria-label="Visibility">
+          <p class="dropdown__section-label">Visibility</p>
+          <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="publish_state" value="published">
+            <input type="hidden" name="redirectTo" value="/admin/dashboard">
+            <button type="submit" class="dropdown__link" <%= isPublic ? 'disabled' : '' %>>
+              <span class="dropdown__icon-badge dropdown__icon-badge--live">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 10V3H3v18h18V10h-8Zm-8 9V5h6v5h5v9H5Zm12-9v-2h2v2h-2Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Publish</span>
+            </button>
+          </form>
+          <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="publish_state" value="private">
+            <input type="hidden" name="redirectTo" value="/admin/dashboard">
+            <button type="submit" class="dropdown__link">
+              <span class="dropdown__icon-badge dropdown__icon-badge--private">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17 8V6a5 5 0 0 0-10 0v2H5v12h14V8h-2Zm-8-2a3 3 0 1 1 6 0v2H9V6Zm8 12H7v-6h10v6Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Private link</span>
+            </button>
+          </form>
+          <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="publish_state" value="draft">
+            <input type="hidden" name="redirectTo" value="/admin/dashboard">
+            <button type="submit" class="dropdown__link">
+              <span class="dropdown__icon-badge dropdown__icon-badge--warning">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm4 18H6V4h7v5h5v11ZM12 11l-3 3h2v4h2v-4h2l-3-3Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Unpublish</span>
+            </button>
+          </form>
+        </div>
+        <div class="dropdown__section" role="group" aria-label="Tools">
+          <p class="dropdown__section-label">Tools</p>
+          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
+            <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v12h2V4h10V2Zm4 4H9a2 2 0 0 0-2 2v14h12a2 2 0 0 0 2-2V6Zm-2 14H9V6h8v12ZM12 11l-3 3h2v4h2v-4h2l-3-3Z"/></svg>
+            </span>
+            <span class="dropdown__link-text">Export skeleton (no contacts)</span>
+          </a>
+          <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a copy of this event (stations and time blocks only)?" data-confirm-cta="Copy">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="dropdown__link">
+              <span class="dropdown__icon-badge dropdown__icon-badge--primary">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 2H5a2 2 0 0 0-2 2v12h2V4h7v5h5v9H5Zm4 4H9a2 2 0 0 0-2 2v14h12a2 2 0 0 0 2-2V6Zm-2 14H9V6h8v12Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Copy event</span>
+            </button>
+          </form>
+        </div>
+        <div class="dropdown__section dropdown__section--danger" role="group" aria-label="Delete">
+          <p class="dropdown__section-label">Danger zone</p>
+          <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item" data-confirm="Delete this event and all of its stations, time blocks, and volunteers? This cannot be undone." data-confirm-cta="Delete">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="dropdown__link btn-danger">
+              <span class="dropdown__icon-badge dropdown__icon-badge--danger">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Delete</span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </details>
+  </td>
+</tr>

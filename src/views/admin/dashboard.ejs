@@ -51,7 +51,7 @@
         <label for="event-signup-mode">Sign-up type</label>
         <select id="event-signup-mode" name="signup_mode" required>
           <option value="schedule" selected>Volunteer schedule (stations &amp; time slots)</option>
-          <option value="potluck">Potluck (categories &amp; items, no times)</option>
+          <option value="potluck">Food Prep (categories &amp; items, no times)</option>
         </select>
       </div>
     </div>
@@ -63,12 +63,21 @@
 
 <section class="page-section page-shell">
   <% if (events && events.length > 0) { %>
-    <% const now = new Date(); %>
+    <% 
+      const now = new Date();
+      const upcomingEvents = [];
+      const pastEvents = [];
+      events.forEach(event => {
+        const endDate = new Date(event.date_end);
+        const hasEnded = endDate && !Number.isNaN(endDate.getTime()) && endDate < now;
+        (hasEnded ? pastEvents : upcomingEvents).push(event);
+      });
+    %>
     <article class="card card--table">
       <div class="card-header">
         <div>
           <h2>Events</h2>
-          <p class="muted">Newest events appear first. Past events are clearly labeled.</p>
+          <p class="muted">Newest events appear first. Past events can be revealed from the section below.</p>
         </div>
       </div>
       <div class="table-scroll" role="region" aria-label="Existing events">
@@ -81,10 +90,7 @@
               <th data-sort-key="status">
                 <span class="table-heading-with-help">
                   Status
-                  <span class="table-heading-hint"
-                        tabindex="0"
-                        title="Draft: hidden from volunteers. Private link: requires the shared link. Published: listed on Upcoming Sign-ups."
-                        aria-label="Status legend: Draft is hidden from volunteers, Private link requires the shared link, Published appears on Upcoming Sign-ups.">
+                  <span class="table-heading-hint" tabindex="0" title="Draft: hidden from volunteers. Private link: requires the shared link. Published: listed on Upcoming Sign-ups." aria-label="Status legend: Draft is hidden from volunteers, Private link requires the shared link, Published appears on Upcoming Sign-ups.">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg>
                     <span class="sr-only">Status legend</span>
                   </span>
@@ -94,169 +100,54 @@
             </tr>
           </thead>
           <tbody>
-            <% events.forEach(event => { %>
-              <%
-                const endDate = new Date(event.date_end);
-                const isPast = endDate && !Number.isNaN(endDate.getTime()) && endDate < now;
-                const publishState = String(event.publish_state || (event.is_published ? 'published' : 'draft'));
-                const isDraft = publishState === 'draft';
-                const isPrivate = publishState === 'private';
-                const isPublic = publishState === 'published';
-                const statusText = isPublic ? 'Published' : (isPrivate ? 'Private link' : 'Draft');
-                const sortStatus = (isPast ? 'past_' : 'upcoming_') + publishState;
-                const sharePath = '/events/' + event.event_id;
-              %>
-              <tr class="event-row <%= 'event-row--' + publishState %> <%= isPast ? 'event-row--past' : '' %>"
-                  data-event-id="<%= event.event_id %>"
-                  data-event-url="/admin/event/<%= event.event_id %>"
-                  data-event-name="<%= event.name %>"
-                  data-sort-name="<%= (event.name || '').toLowerCase() %>"
-                  data-sort-date="<%= event.date_start %>"
-                  data-sort-status="<%= sortStatus %>">
-                <td data-th="Type" class="col-type">
-                  <span class="type-icon <%= (String(event.signup_mode||'')==='potluck') ? 'type-icon--potluck' : 'type-icon--schedule' %>"
-                        title="<%= (String(event.signup_mode||'')==='potluck') ? 'Potluck event' : 'Scheduled event' %>"
-                        aria-label="<%= (String(event.signup_mode||'')==='potluck') ? 'Potluck event' : 'Scheduled event' %>">
-                    <% if (String(event.signup_mode||'')==='potluck') { %>
-                      <!-- Bowl with steam icon for Potluck -->
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <!-- Steam -->
-                        <path d="M9 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M12 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1M15 5.5c0 1-.8 1.3-.8 2.2 0 .4.1.8.3 1.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                        <!-- Bowl -->
-                        <path d="M6 11h12v1.2a5.3 5.3 0 0 1-5.3 5.3H11.3A5.3 5.3 0 0 1 6 12.2V11Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
-                    <% } else { %>
-                      <!-- Refined calendar icon -->
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
-                        <path d="M8 3.5v3M16 3.5v3M3.5 10.5h17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                      </svg>
-                    <% } %>
-                  </span>
-                </td>
-                <td data-th="Name">
-                  <strong><%= event.name %></strong>
-                  <% if (isPast) { %>
-                    <span class="muted small event-label-past">Past event</span>
-                  <% } %>
-                </td>
-                <td data-th="Dates">
-                  <%= new Date(event.date_start).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
-                  &nbsp;–&nbsp;
-                  <%= new Date(event.date_end).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) %>
-                </td>
-                <td data-th="Status">
-                  <span class="status-pill <%= isPublic ? 'status-pill--live' : (isPrivate ? 'status-pill--private' : 'status-pill--draft') %>">
-                    <%= statusText %>
-                  </span>
-                </td>
-                <td data-th="Actions" class="row-actions">
-                  <a href="/admin/event/<%= event.event_id %>" class="btn btn-primary">Manage</a>
-                  <details class="dropdown dropdown--float" style="display:inline-block;margin-left:6px;">
-                    <summary class="btn btn-accent">Actions</summary>
-                    <div class="dropdown__menu dropdown__menu--sections">
-                      <div class="dropdown__section" role="group" aria-label="Manage">
-                        <p class="dropdown__section-label">Manage</p>
-                        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>?edit=1">
-                          <span class="dropdown__icon-badge dropdown__icon-badge--primary">
-                            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
-                          </span>
-                          <span class="dropdown__link-text">Edit event…</span>
-                        </a>
-                        <a class="dropdown__link"
-                           href="<%= isDraft
-                             ? (sharePath + '?preview=1&return=' + encodeURIComponent('/admin/dashboard'))
-                             : (sharePath + '?return=' + encodeURIComponent('/admin/dashboard')) %>">
-                          <span class="dropdown__icon-badge dropdown__icon-badge--muted">
-                            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5c-5 0-9.27 3.11-11 7 1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-6.2A2.2 2.2 0 1 0 14.2 12 2.2 2.2 0 0 0 12 9.8Z"/></svg>
-                          </span>
-                          <span class="dropdown__link-text"><%= isDraft ? 'Preview public page' : (isPrivate ? 'Open private link' : 'View public page') %></span>
-                        </a>
-                      </div>
-                      <div class="dropdown__section" role="group" aria-label="Visibility and sharing">
-                        <p class="dropdown__section-label">Visibility &amp; sharing</p>
-                        <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
-                          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                          <input type="hidden" name="publish_state" value="published">
-                          <input type="hidden" name="redirectTo" value="/admin/dashboard">
-                          <button type="submit" class="dropdown__link">
-                            <span class="dropdown__icon-badge dropdown__icon-badge--success">
-                              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3l5 5h-3v6h-4V8H7l5-5Zm-7 14v2h14v-2H5Z"/></svg>
-                            </span>
-                            <span class="dropdown__link-text">Publish to Upcoming Sign-ups</span>
-                          </button>
-                        </form>
-                        <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
-                          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                          <input type="hidden" name="publish_state" value="private">
-                          <input type="hidden" name="redirectTo" value="/admin/dashboard">
-                          <button type="submit" class="dropdown__link">
-                            <span class="dropdown__icon-badge dropdown__icon-badge--muted">
-                              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10.59 13.41a2 2 0 0 0 2.82 0l3.18-3.18a3 3 0 0 0-4.24-4.24L11 7.34l1.41 1.41 1.35-1.35a1 1 0 1 1 1.42 1.42l-3.18 3.18a.98.98 0 0 1-1.41 0L7.4 9.17a3 3 0 0 0-4.24 4.24l1.76 1.76 1.41-1.41-1.76-1.76a1 1 0 0 1 1.41-1.41l3.01 3.01Z"/></svg>
-                            </span>
-                            <span class="dropdown__link-text">Make private link</span>
-                          </button>
-                        </form>
-                        <form action="/admin/event/<%= event.event_id %>/publish" method="POST" class="inline-form dropdown__item">
-                          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                          <input type="hidden" name="publish_state" value="draft">
-                          <input type="hidden" name="redirectTo" value="/admin/dashboard">
-                          <button type="submit" class="dropdown__link">
-                            <span class="dropdown__icon-badge dropdown__icon-badge--warning">
-                              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21l-5-5h3V8h4v8h3l-5 5Zm7-14V5H5v2h14Z"/></svg>
-                            </span>
-                            <span class="dropdown__link-text">Unpublish</span>
-                          </button>
-                        </form>
-                      </div>
-                      <div class="dropdown__section" role="group" aria-label="Tools">
-                        <p class="dropdown__section-label">Tools</p>
-                        <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
-                          <span class="dropdown__icon-badge dropdown__icon-badge--muted">
-                            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm4 18H6V4h7v5h5v11ZM12 11l-3 3h2v4h2v-4h2l-3-3Z"/></svg>
-                          </span>
-                          <span class="dropdown__link-text">Export skeleton (no contacts)</span>
-                        </a>
-                        <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a copy of this event (stations and time blocks only)?" data-confirm-cta="Copy">
-                          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                          <button type="submit" class="dropdown__link">
-                            <span class="dropdown__icon-badge dropdown__icon-badge--primary">
-                              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 2H5a2 2 0 0 0-2 2v12h2V4h10V2Zm4 4H9a2 2 0 0 0-2 2v14h12a2 2 0 0 0 2-2V6Zm-2 14H9V6h8v12Z"/></svg>
-                            </span>
-                            <span class="dropdown__link-text">Copy event</span>
-                          </button>
-                        </form>
-                      </div>
-                      <div class="dropdown__section dropdown__section--danger" role="group" aria-label="Delete">
-                        <p class="dropdown__section-label">Danger zone</p>
-                        <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item" data-confirm="Delete this event and all of its stations, time blocks, and volunteers? This cannot be undone." data-confirm-cta="Delete">
-                          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-                          <button type="submit" class="dropdown__link btn-danger">
-                            <span class="dropdown__icon-badge dropdown__icon-badge--danger">
-                              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
-                            </span>
-                            <span class="dropdown__link-text">Delete</span>
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  </details>
-                </td>
+            <% if (upcomingEvents.length === 0) { %>
+              <tr>
+                <td colspan="5" class="table-empty muted">No active events right now. Expand “Show past events” below to view history.</td>
               </tr>
-            <% }) %>
+            <% } else { %>
+              <% upcomingEvents.forEach(event => { %>
+                <%- include('partials/event-row', { event, isPast: false, csrfToken: locals.csrfToken }) %>
+              <% }) %>
+            <% } %>
           </tbody>
         </table>
       </div>
     </article>
+    <% if (pastEvents.length > 0) { %>
+      <details class="past-events" data-past-events>
+        <summary class="past-events__summary">Show past events (<%= pastEvents.length %>)</summary>
+        <div class="past-events__body">
+          <div class="table-scroll" role="region" aria-label="Past events">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="col-type">Type</th>
+                  <th>Name</th>
+                  <th>Dates</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% pastEvents.forEach(event => { %>
+                  <%- include('partials/event-row', { event, isPast: true, csrfToken: locals.csrfToken }) %>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    <% } %>
   <% } else { %>
     <article class="card card--plain empty-state">
       <h2>No events created yet</h2>
       <p class="muted">Start by creating your first event, then add stations and time blocks to open volunteer opportunities.</p>
       <div class="action-row">
-      <button class="btn btn-primary" data-open="#newEventModal">Create your first event</button>
-    </div>
-  </article>
-<% } %>
+        <button class="btn btn-primary" data-open="#newEventModal">Create your first event</button>
+      </div>
+    </article>
+  <% } %>
 </section>
+
 
 <%- include('../partials/footer') %>

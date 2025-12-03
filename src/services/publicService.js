@@ -193,13 +193,7 @@ function issueManageToken(volunteerId, eventId) {
   return token;
 }
 
-/**
- * Sends the transactional email letting volunteers know which opportunities they have
- * reserved. The same template is reused for new sign-ups and updates.
- */
-async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl, isUpdate }) {
-  if (!volunteer.email) return;
-
+function resolveSupportContact() {
   const branding = getBranding();
   const supportName = branding.supportContactName || branding.orgName || 'Our team';
   const supportEmail = branding.supportContactEmail;
@@ -216,10 +210,21 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
       : '';
     return `Reach out${emailHtml}${phoneHtml}.`;
   })();
+  return { supportName, supportEmail, supportPhone, supportContactHtml };
+}
+
+/**
+ * Sends the transactional email letting volunteers know which opportunities they have
+ * reserved. The same template is reused for new sign-ups and updates.
+ */
+async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl, isUpdate }) {
+  if (!volunteer.email) return;
+
+  const { supportName, supportEmail, supportPhone, supportContactHtml } = resolveSupportContact();
 
   const isPotluckEmail = String(event && event.signup_mode || '').toLowerCase() === 'potluck';
   const subject = isPotluckEmail
-    ? (isUpdate ? `Updated potluck signup for ${event.name}` : `Your potluck signup for ${event.name}`)
+    ? (isUpdate ? `Updated food prep signup for ${event.name}` : `Your food prep signup for ${event.name}`)
     : (isUpdate ? `Updated volunteer schedule for ${event.name}` : `Your volunteer schedule for ${event.name}`);
 
   const listItems = reservations.length
@@ -233,9 +238,9 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
   const textLines = (function(){
     const lines = [`Hi ${volunteer.name || volunteer.email},`, ''];
     if (isPotluckEmail) {
-      lines.push(`Thank you for contributing to the potluck for ${event.name}! We\'re excited to see what you\'re bringing.`);
+      lines.push(`Thank you for contributing to the food prep for ${event.name}! We're excited to see what you're preparing.`);
       lines.push('');
-      lines.push('Here are the items you\'ve signed up to bring:');
+      lines.push('Here are the items you\'ve signed up to prepare:');
     } else {
       lines.push(`Thank you so much for serving with us at ${event.name}! We are grateful for your time and heart to help our community.`);
       lines.push('');
@@ -324,7 +329,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
                   <tr>
                     <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
                       <p style="margin:0 0 16px; font-size:16px;">Hi ${volunteer.name || volunteer.email},</p>
-                      <p style="margin:0 0 16px; color:#475569; line-height:1.7;">${isPotluckEmail ? 'Below are the potluck items you\'ve signed up to bring.' : `Thank you for lending your time and heart to serve. Below you'll find your volunteer schedule details.`}</p>
+                      <p style="margin:0 0 16px; color:#475569; line-height:1.7;">${isPotluckEmail ? 'Below are the food prep items you\'ve signed up for.' : `Thank you for lending your time and heart to serve. Below you'll find your volunteer schedule details.`}</p>
                       ${htmlList}
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:32px auto 28px;">
                         <tr>
@@ -577,36 +582,107 @@ async function sendManageReminder(email, eventId) {
   }
   const token = issueManageToken(v.volunteer_id, Number(eventId));
   const manageUrl = buildManageUrl(token);
+  const { supportName, supportEmail, supportPhone, supportContactHtml } = resolveSupportContact();
+  const greetingName = v.name || inputEmail;
   const subject = `Manage your signup for ${event.name}`;
-  const text = `Use this link to view or edit your selections for ${event.name}:\n\n${manageUrl}\n\nIf you did not request this, you can ignore this email.`;
+  const contactLines = [];
+  if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
+  if (supportPhone) contactLines.push(`Phone: ${supportPhone}`);
+  const textParts = [
+    `Hi ${greetingName},`,
+    '',
+    `Use the link below to view or edit your selections for ${event.name}.`,
+    '',
+    manageUrl
+  ];
+  if (contactLines.length) {
+    textParts.push('', 'Need help? Contact us:', ...contactLines);
+  } else {
+    textParts.push('', 'Need help? Reply to this email and we will help you.');
+  }
+  textParts.push('', 'With gratitude,', supportName || 'Volunteer Team', '', 'If you did not request this email you can ignore it.');
+  const text = textParts.join('\n');
   const html = `<!DOCTYPE html>
-    <html>
+    <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
       <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <title>${subject}</title>
+        <style>
+          table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+          a { text-decoration:none; }
+        </style>
+        <!--[if mso]>
+        <style type="text/css">
+          body, table, td { font-family: 'Segoe UI', Arial, sans-serif !important; }
+        </style>
+        <![endif]-->
       </head>
-      <body style="margin:0;padding:0;background:#f3f6fb;color:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
-        <div style="max-width:680px;margin:0 auto;padding:24px 16px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff;border:1px solid rgba(15,23,42,0.12);border-radius:16px;box-shadow:0 6px 18px rgba(15,23,42,0.08);">
+      <body style="margin:0; padding:0; background-color:#dfe4f3;">
+        <div role="article" aria-roledescription="email" lang="en" style="background-color:#dfe4f3;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#dfe4f3; margin:0;">
             <tr>
-              <td style="padding:28px 28px 16px 28px;">
-                <h1 style="margin:0 0 8px 0;font-size:22px;letter-spacing:-0.01em;">Manage your signup</h1>
-                <p style="margin:0;color:#475569;">Use the button below to view or edit your selections for <strong>${event.name}</strong>.</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:8px 28px 28px 28px;">
+              <td align="center" style="padding:32px 16px;">
                 <!--[if mso]>
-                <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${manageUrl}" style="height:46px;v-text-anchor:middle;width:260px;" arcsize="50%" stroke="f" fillcolor="#2563eb">
-                  <w:anchorlock/>
-                  <center style="color:#ffffff;font-family:'Segoe UI',Arial,sans-serif;font-size:15px;font-weight:600;">Open manage page</center>
-                </v:roundrect>
+                  <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td>
                 <![endif]-->
-                <a href="${manageUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#ffffff;padding:13px 22px;border-radius:999px;font-weight:600;text-decoration:none;font-size:15px;">Open manage page</a>
-                <p style="margin:16px 0 0 0;color:#64748b;font-size:14px;">If the button doesn’t work, copy and paste this URL into your browser:</p>
-                <p style="margin:6px 0 0 0;word-break:break-all;color:#1d4ed8;font-size:14px;"><a href="${manageUrl}" style="color:#1d4ed8;text-decoration:none;">${manageUrl}</a></p>
-                <p style="margin:18px 0 0 0;color:#64748b;font-size:13px;">If you did not request this, you can ignore this email.</p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px; background-color:#ffffff; border-radius:18px; box-shadow:0 20px 38px rgba(15,23,42,0.12); overflow:hidden;" bgcolor="#ffffff">
+                  <tr>
+                    <td bgcolor="#2563eb" style="background-color:#2563eb; padding:28px 32px; color:#ffffff; font-family:'Segoe UI', Arial, sans-serif;">
+                      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em;">Need to make an update?</h1>
+                      <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">Open your manage link for <strong>${event.name}</strong> to view or edit your selections.</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
+                      <p style="margin:0 0 16px; font-size:16px;">Hi ${greetingName},</p>
+                      <p style="margin:0 0 24px; color:#475569; line-height:1.7;">Use the button below to access your personal manage page.</p>
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px;">
+                        <tr>
+                          <td align="center" role="presentation">
+                            <!--[if mso]>
+                              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${manageUrl}" style="height:48px; v-text-anchor:middle; width:240px;" arcsize="50%" stroke="f" fillcolor="#2563eb">
+                                <w:anchorlock/>
+                                <center style="color:#ffffff; font-family:'Segoe UI', Arial, sans-serif; font-size:15px; font-weight:600;">
+                                  Manage Your Signup
+                                </center>
+                              </v:roundrect>
+                            <![endif]-->
+                            <!--[if !mso]><!-- -->
+                              <a href="${manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
+                                Manage Your Signup
+                              </a>
+                            <!--<![endif]-->
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:0 0 12px; color:#475569; font-size:14px;">If the button doesn't work, copy and paste this URL into your browser:</p>
+                      <p style="margin:0 0 24px; color:#1d4ed8; font-size:14px; word-break:break-all;"><a href="${manageUrl}" style="color:#1d4ed8;">${manageUrl}</a></p>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(15,23,42,0.08); margin-top:16px; padding-top:24px;">
+                        <tr>
+                          <td style="font-family:'Segoe UI', Arial, sans-serif;">
+                            <p style="margin:0 0 12px; font-weight:600; color:#0f172a;">Need a hand?</p>
+                            <p style="margin:0; color:#475569; line-height:1.7;">Our team is here to help with any changes or questions. ${supportContactHtml}</p>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${supportName || 'Volunteer Team'}</strong></p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td bgcolor="#f3f6fb" style="background-color:#f3f6fb; padding:18px 32px; text-align:center; color:#94a3b8; font-size:13px; font-family:'Segoe UI', Arial, sans-serif;">
+                      If you did not request this email you can ignore it.
+                    </td>
+                  </tr>
+                </table>
+                <!--[if mso]>
+                      </td>
+                    </tr>
+                  </table>
+                <![endif]-->
               </td>
             </tr>
           </table>

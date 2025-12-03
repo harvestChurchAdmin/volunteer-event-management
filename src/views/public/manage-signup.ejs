@@ -32,7 +32,7 @@
     <% if (event.description) { %>
       <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
     <% } else { %>
-      <p class="muted"><%= isPotluck ? 'Review your potluck items below.' : 'Review the stations and times below, then update your selections as needed.' %></p>
+      <p class="muted"><%= isPotluck ? 'Review your food prep items below.' : 'Review the stations and times below, then update your selections as needed.' %></p>
     <% } %>
     <p class="muted">Update or remove your selections using the list below, then choose "Save changes" to send yourself a confirmation email.</p>
     <p class="muted small">
@@ -138,8 +138,8 @@
                     <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
                     <div class="time-block-item__others">
                       <% if (_shown.length) { %>
-                        <div class="dish-notes-inline" title="Dishes others have signed up to bring (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others bringing</strong></div>
-                        <ul class="dish-notes-list" title="Dishes others have signed up to bring (duplicates welcome)">
+                        <div class="dish-notes-inline" title="Items others have signed up to prepare (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others signed up</strong></div>
+                        <ul class="dish-notes-list" title="Items others have signed up to prepare (duplicates welcome)">
                           <% _shown.forEach(function(n){ %>
                             <% if (typeof n === 'object') { %>
                               <li><%= n.text %><% if (n.by) { %> (<%= n.by %>)<% } %></li>

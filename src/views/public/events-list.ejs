@@ -1,17 +1,33 @@
 <%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
 
-<section class="page-header page-shell">
-  <div>
+<section class="page-header page-header--compact page-shell">
+  <div class="page-header__intro page-header__intro--full">
     <h1>Upcoming Sign-ups</h1>
-    <p class="page-subtitle">Find a time that works for you and sign up quickly.</p>
+    <p class="page-subtitle">Browse open volunteer shifts, outreach projects, and food prep items—then choose what fits your schedule.</p>
     <%
       const brandInfo = locals.brand || {};
       const supportEmail = brandInfo.supportContactEmail || '';
       const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team';
     %>
-    <p class="muted small">
-      New here? <a href="/help">Read the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } %>.
-    </p>
+    <details class="page-help">
+      <summary class="page-help__summary">
+        <span class="page-help__summary-title">Need help getting started?</span>
+        <span class="page-help__summary-meta">Tap or click for quick tips</span>
+      </summary>
+      <div class="page-help__body">
+        <p>
+          New here? <a href="/help">Read the volunteer help guide</a> for a quick walk-through on how to reserve a time or item.
+        </p>
+        <% if (supportEmail) { %>
+          <p class="page-help__contact">
+            Questions? Email <strong><%= supportName %></strong> at
+            <a class="page-help__email" href="mailto:<%= supportEmail %>"><%= supportEmail %></a>.
+          </p>
+        <% } else { %>
+          <p class="page-help__contact">Questions? Reply to your confirmation email and we’ll be in touch.</p>
+        <% } %>
+      </div>
+    </details>
   </div>
 </section>
 
@@ -24,7 +40,7 @@
       <% const sameDay = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate(); %>
       <% const timeOnly = (d) => new Date(d).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); %>
       <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
-      <% const heroLabel = isPotluck ? 'Potluck event' : 'Volunteer event'; %>
+      <% const heroLabel = isPotluck ? 'Food Prep event' : 'Volunteer event'; %>
       <% const heroIcon = isPotluck ? '/img/event-icon-potluck.svg' : '/img/event-icon-volunteer.svg'; %>
       <% const metaClasses = ['event-card__meta', isPotluck ? 'event-card__meta--potluck' : '', sameDay ? '' : 'event-card__meta--multiday'].filter(Boolean).join(' '); %>
       <% const startDateLabel = start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); %>
@@ -42,7 +58,7 @@
             <% if (event.description) { %>
               <div class="event-card__hero-text rich-text"><%- helpers.renderRichText(event.description) %></div>
             <% } else { %>
-              <p class="event-card__hero-text"><%= isPotluck ? 'Sign up to contribute a dish or item.' : 'Pick a time slot to lend a hand.' %></p>
+              <p class="event-card__hero-text"><%= isPotluck ? 'Sign up to prep food or bring an item.' : 'Pick a time slot to lend a hand.' %></p>
             <% } %>
           </div>
         </div>
@@ -65,7 +81,7 @@
           </div>
         </div>
         <div class="card-actions">
-          <a href="/events/<%= event.event_id %>" class="btn btn-primary"><%= isPotluck ? 'Sign Up to Bring a Dish' : 'View sign-ups' %></a>
+          <a href="/events/<%= event.event_id %>" class="btn btn-primary"><%= isPotluck ? 'Sign Up for Food Prep' : 'View sign-ups' %></a>
         </div>
       </article>
     <% }) %>

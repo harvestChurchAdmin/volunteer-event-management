@@ -6,10 +6,13 @@
 <% const selectedBlockIds = Array.isArray(locals.selectedBlockIds) ? locals.selectedBlockIds : []; %>
 <% const draftDishNotes = (locals.draftDishNotes && typeof locals.draftDishNotes === 'object') ? locals.draftDishNotes : {}; %>
 <% const formDefaults = locals.formDefaults || {}; %>
+<% const brandInfo = locals.brand || {}; %>
+<% const supportEmail = brandInfo.supportContactEmail || ''; %>
+<% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
 
 <!-- Inline preview indicator now appears near the title; no separate banner -->
 
-<section class="page-header page-shell">
+<section class="page-header page-header--compact page-shell">
   <div>
     <% if (!(typeof preview !== 'undefined' && preview)) { %>
       <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
@@ -44,27 +47,38 @@
   <% } %>
 </section>
 
-<section class="page-section page-shell <%= debugLayout ? 'debug-layout' : '' %>">
-      <article class="card card--plain" data-debug="<%= debugLayout ? 'station-card' : '' %>">
-        <% if (event.description) { %>
-          <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
-        <% } else { %>
-          <p class="muted"><%= isPotluck ? 'Select a category and item to bring.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
-        <% } %>
-    <%
-      const brandInfo = locals.brand || {};
-      const supportEmail = brandInfo.supportContactEmail || '';
-      const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team';
-    %>
-    <p class="muted small">
-      Need instructions? <a href="/help">Open the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>. If you are stuck, reply to your confirmation email.<% } %>
-    </p>
+<section class="page-section page-section--compact page-shell <%= debugLayout ? 'debug-layout' : '' %>">
+  <article class="card card--plain" data-debug="<%= debugLayout ? 'station-card' : '' %>">
+    <% if (event.description) { %>
+      <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
+    <% } else { %>
+      <p class="muted"><%= isPotluck ? 'Select a category and item to prepare.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
+    <% } %>
   </article>
+  <details class="page-help event-detail__help">
+    <summary class="page-help__summary">
+      <span class="page-help__summary-title">Need help getting started?</span>
+      <span class="page-help__summary-meta">Tap or click for quick tips</span>
+    </summary>
+    <div class="page-help__body">
+      <p>
+        Need instructions? <a href="/help">Open the volunteer help guide</a> for a quick refresher on choosing a time slot or food item.
+      </p>
+      <% if (supportEmail) { %>
+        <p class="page-help__contact">
+          Questions? Email <strong><%= supportName %></strong> at
+          <a class="page-help__email" href="mailto:<%= supportEmail %>"><%= supportEmail %></a>.
+        </p>
+      <% } else { %>
+        <p class="page-help__contact">Questions? Reply to your confirmation email and we’ll be in touch.</p>
+      <% } %>
+    </div>
+  </details>
 </section>
 
 <%- include('../partials/messages') %>
 
-<section class="page-section page-shell" aria-label="Manage link reminder">
+<section class="page-section page-section--compact page-shell" aria-label="Manage link reminder">
   <details class="disclosure">
     <summary class="disclosure__summary">
       <svg class="disclosure__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm-1-8.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></svg>
@@ -89,7 +103,7 @@
 %>
 
 <% if (hasTimeBlocks) { %>
-  <section class="page-section page-shell <%= debugLayout ? 'debug-layout' : '' %>" data-debug="<%= debugLayout ? 'page-shell' : '' %>">
+  <section class="page-section page-section--compact page-shell <%= debugLayout ? 'debug-layout' : '' %>" data-debug="<%= debugLayout ? 'page-shell' : '' %>">
     <% if (!isPotluck) { %>
       <div class="slot-toolbar">
         <div class="slot-toolbar__group">
@@ -174,7 +188,7 @@
                         <span class="muted"> • Slots: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
                       <% } %>
                       <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
-                      <% /* Potluck "Others bringing" is rendered in the dedicated right column below. */ %>
+                      <% /* Food prep "Others signed up" is rendered in the dedicated right column below. */ %>
                       <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
                       <div class="time-block-item__hint">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
@@ -185,8 +199,8 @@
                       <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
                       <div class="time-block-item__others">
                         <% if (_shown.length) { %>
-                          <div class="dish-notes-inline" title="Dishes others have signed up to bring (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others bringing</strong></div>
-                          <ul class="dish-notes-list" title="Dishes others have signed up to bring (duplicates welcome)">
+                          <div class="dish-notes-inline" title="Items others have signed up to prepare (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others signed up</strong></div>
+                          <ul class="dish-notes-list" title="Items others have signed up to prepare (duplicates welcome)">
                             <% _shown.forEach(function(n){ %>
                               <% if (typeof n === 'object') { %>
                                 <li><%= n.text %><% if (n.by) { %> (<%= n.by %>)<% } %></li>

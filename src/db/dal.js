@@ -244,6 +244,20 @@ const admin = {
     }
   },
 
+  // Update the note associated with a reservation (potluck dish names).
+  updateReservationNote: (reservationId, note) => {
+    try {
+      const res = db.prepare(`
+        UPDATE reservations
+        SET note = ?
+        WHERE reservation_id = ?
+      `).run((note == null || note === '') ? null : note, reservationId);
+      return mapRun(res);
+    } catch (e) {
+      throw createError(500, 'DB error updating reservation note: ' + e.message);
+    }
+  },
+
   // Remove a volunteer reservation from a time block.
   deleteReservation: (reservationId) => {
     try {

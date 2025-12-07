@@ -708,6 +708,99 @@ details.dropdown[open] > summary { opacity: 0.9; }
   font-size: clamp(1.4rem, 2.2vw, 1.8rem);
 }
 
+.admin-event-search {
+  width: 100%;
+  margin-bottom: 0.4rem;
+}
+
+.admin-event-search__field {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--surface);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.admin-event-search__field:focus-within {
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: var(--focus-ring);
+}
+
+.admin-event-search__icon {
+  display: inline-flex;
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--text-soft);
+}
+
+.admin-event-search__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.admin-event-search__field input {
+  flex: 1;
+  font: inherit;
+  border: none;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  color: inherit;
+}
+
+.admin-event-search__field input:focus {
+  outline: none;
+}
+
+.admin-event-search__clear {
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  padding: 0.15rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+
+.admin-event-search__clear.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.admin-event-search__clear:hover {
+  color: var(--text-strong);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.admin-event-search__clear:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.admin-event-search__clear svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  display: block;
+}
+
+.admin-event-search__hint {
+  margin: 0.25rem 0 0;
+}
+
+.admin-event-search__status {
+  min-height: 1.4rem;
+  margin-bottom: 0.8rem;
+}
+
 .muted {
   color: var(--text-soft);
 }
@@ -726,6 +819,13 @@ details.dropdown[open] > summary { opacity: 0.9; }
   gap: clamp(1.5rem, 3vw, 2.5rem);
   padding: 1rem 0;
   align-items: stretch;
+}
+
+@media (min-width: 1000px) and (max-width: 1699px) {
+  .tile-grid {
+    /* Keep event cards at a reasonable width before the large-screen layout kicks in */
+    grid-template-columns: repeat(2, minmax(320px, 1fr));
+  }
 }
 
 .tile-grid > * {

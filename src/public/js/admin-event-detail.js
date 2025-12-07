@@ -17,6 +17,7 @@
   const SCROLL_KEY = 'admin:scrollY';
   const FOCUS_STATION_KEY = 'admin:focusStation';
   const COLLAPSED_STORAGE_KEY = 'admin:collapsedStations';
+  const EVENT_SEARCH_STORAGE_PREFIX = 'admin:eventSearch:';
 
   // Helpers ------------------------------------------------------------------
   /**
@@ -775,6 +776,7 @@
 
         setOpen(openSet.has(bid));
         d.addEventListener('toggle', function() {
+          if (d.dataset.searchToggleGuard === '1') return;
           if (d.open) openSet.add(bid); else openSet.delete(bid);
           saveSet(openSet);
           // Update block class for styling without relying on :has
@@ -909,6 +911,279 @@
           });
         });
       });
+    })();
+
+    // Event-wide search filtering -------------------------------------------
+    (function initEventSearch() {
+      const input = qs('[data-event-search-input]');
+      if (!input) return;
+      const clearBtn = qs('[data-event-search-clear]');
+      const statusEl = qs('#adminEventSearchStatus');
+      const stationCards = qsa('article.station-card');
+      if (!stationCards.length) return;
+      const MIN_CHARS = 3;
+      const stationGrid = qs('.station-grid.js-station-list');
+      const eventId = stationGrid ? stationGrid.getAttribute('data-event-id') : '';
+      const searchStorageKey = EVENT_SEARCH_STORAGE_PREFIX + (eventId || 'default');
+
+      function readStoredSearchValue() {
+        try {
+          return sessionStorage.getItem(searchStorageKey) || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function persistSearchValue(rawValue) {
+        const value = (rawValue == null) ? '' : String(rawValue);
+        const trimmed = value.trim();
+        try {
+          if (trimmed.length >= MIN_CHARS) {
+            sessionStorage.setItem(searchStorageKey, value);
+          } else {
+            sessionStorage.removeItem(searchStorageKey);
+          }
+        } catch (_) { /* ignore */ }
+      }
+
+      function normalize(text) {
+        return (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      }
+
+      function setDetailsOpenState(details, shouldOpen) {
+        if (!details) return;
+        const currentlyOpen = details.hasAttribute('open');
+        if (currentlyOpen === shouldOpen) return;
+        details.dataset.searchToggleGuard = '1';
+        if (shouldOpen) details.setAttribute('open', '');
+        else details.removeAttribute('open');
+        setTimeout(() => { delete details.dataset.searchToggleGuard; }, 0);
+        const block = details.closest ? details.closest('.admin-block') : null;
+        if (block) {
+          if (shouldOpen) block.classList.add('has-open-reservations');
+          else block.classList.remove('has-open-reservations');
+        }
+      }
+
+      function collectBlockMetaText(block) {
+        if (!block) return '';
+        const clone = block.cloneNode(true);
+        qsa('details.admin-reservations, .admin-reservation-list, .admin-reservation', clone).forEach(node => {
+          if (node && node.parentNode) node.parentNode.removeChild(node);
+        });
+        return normalize(clone.textContent || '');
+      }
+
+      function buildIndex() {
+        return stationCards.map(card => {
+          const toggle = card.querySelector('.station-toggle');
+          const header = card.querySelector('.station-card__header');
+          const summary = card.querySelector('.station-card__summary');
+          const stationText = normalize(
+            [(header && header.textContent) || '', (summary && summary.textContent) || ''].join(' ')
+          );
+          const blocks = qsa('.admin-block', card).map(block => {
+            const blockText = collectBlockMetaText(block);
+            const details = block.querySelector('details.admin-reservations');
+            const reservations = qsa('.admin-reservation', block).map(res => ({
+              element: res,
+              text: normalize(res.textContent || '')
+            }));
+            return { block, blockText, details, reservations };
+          });
+          return { card, toggle, stationText, blocks };
+        });
+      }
+
+      const stationIndex = buildIndex();
+
+      function setStationCollapsedState(entry, collapsed) {
+        if (!entry || !entry.card) return;
+        if (collapsed) entry.card.classList.add('is-collapsed');
+        else entry.card.classList.remove('is-collapsed');
+        if (entry.toggle) {
+          entry.toggle.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+          entry.toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+      }
+
+      function ensureStationExpanded(entry) {
+        if (!entry || !entry.card) return;
+        if (!entry.card.dataset.searchCollapsed) {
+          entry.card.dataset.searchCollapsed = entry.card.classList.contains('is-collapsed') ? '1' : '0';
+        }
+        setStationCollapsedState(entry, false);
+      }
+
+      function restoreStation(entry) {
+        if (!entry || !entry.card || !entry.card.dataset.searchCollapsed) return;
+        const shouldCollapse = entry.card.dataset.searchCollapsed === '1';
+        delete entry.card.dataset.searchCollapsed;
+        setStationCollapsedState(entry, shouldCollapse);
+      }
+
+      function ensureDetailsOpen(details) {
+        if (!details) return;
+        if (!details.dataset.searchOriginal) {
+          details.dataset.searchOriginal = details.hasAttribute('open') ? '1' : '0';
+        }
+        setDetailsOpenState(details, true);
+      }
+
+      function restoreDetails(details) {
+        if (!details || !details.dataset.searchOriginal) return;
+        const shouldOpen = details.dataset.searchOriginal === '1';
+        delete details.dataset.searchOriginal;
+        setDetailsOpenState(details, shouldOpen);
+      }
+
+      function resetEntry(entry) {
+        entry.card.style.display = '';
+        restoreStation(entry);
+        entry.blocks.forEach(blockEntry => {
+          blockEntry.block.style.display = '';
+          blockEntry.reservations.forEach(res => { res.element.style.display = ''; });
+          restoreDetails(blockEntry.details);
+        });
+      }
+
+      function resetSearch(statusText) {
+        stationIndex.forEach(resetEntry);
+        if (statusEl) statusEl.textContent = statusText || '';
+      }
+
+      function buildStatusText(term, summary) {
+        const parts = [];
+        if (summary.stations) parts.push(summary.stations + ' station' + (summary.stations === 1 ? '' : 's'));
+        if (summary.blocks) parts.push(summary.blocks + ' block' + (summary.blocks === 1 ? '' : 's'));
+        if (summary.reservations) parts.push(summary.reservations + ' volunteer' + (summary.reservations === 1 ? '' : 's'));
+        if (!parts.length) return 'No matches for "' + term + '"';
+        return 'Found ' + parts.join(', ') + ' for "' + term + '"';
+      }
+
+      function applySearch(termRaw) {
+        const normalized = normalize(termRaw);
+        if (!normalized) {
+          resetSearch('');
+          return;
+        }
+        const summary = { stations: 0, blocks: 0, reservations: 0 };
+        let any = false;
+
+        stationIndex.forEach(entry => {
+          const stationMatches = entry.stationText && entry.stationText.includes(normalized);
+          let cardMatches = false;
+
+          if (stationMatches) {
+            summary.stations += 1;
+            ensureStationExpanded(entry);
+            entry.blocks.forEach(blockEntry => {
+              blockEntry.block.style.display = '';
+              blockEntry.reservations.forEach(res => { res.element.style.display = ''; });
+              restoreDetails(blockEntry.details);
+            });
+            cardMatches = true;
+          } else {
+            entry.blocks.forEach(blockEntry => {
+              const blockMatches = blockEntry.blockText && blockEntry.blockText.includes(normalized);
+              let reservationMatches = 0;
+              blockEntry.reservations.forEach(res => {
+                const resMatches = !!(res.text && res.text.includes(normalized));
+                if (resMatches) reservationMatches += 1;
+                res._searchMatch = resMatches;
+              });
+
+              const filterVolunteers = reservationMatches > 0;
+              blockEntry.reservations.forEach(res => {
+                const matches = !!res._searchMatch;
+                if (filterVolunteers) {
+                  res.element.style.display = matches ? '' : 'none';
+                } else {
+                  res.element.style.display = blockMatches ? '' : 'none';
+                }
+                delete res._searchMatch;
+              });
+
+              const showBlock = blockMatches || reservationMatches > 0;
+              blockEntry.block.style.display = showBlock ? '' : 'none';
+              if (showBlock) {
+                cardMatches = true;
+                summary.blocks += 1;
+                if (blockEntry.details) {
+                  if (reservationMatches > 0) ensureDetailsOpen(blockEntry.details);
+                  else restoreDetails(blockEntry.details);
+                }
+                if (reservationMatches > 0) summary.reservations += reservationMatches;
+              } else if (blockEntry.details) {
+                restoreDetails(blockEntry.details);
+              }
+            });
+          }
+
+          if (cardMatches) {
+            ensureStationExpanded(entry);
+            entry.card.style.display = '';
+            any = true;
+          } else {
+            entry.card.style.display = 'none';
+            restoreStation(entry);
+          }
+        });
+
+        if (statusEl) statusEl.textContent = any
+          ? buildStatusText(termRaw, summary)
+          : 'No matches for "' + termRaw + '"';
+      }
+
+      function setClearVisibility(active) {
+        if (!clearBtn) return;
+        if (active) clearBtn.classList.add('is-visible');
+        else clearBtn.classList.remove('is-visible');
+      }
+
+      function handleInput() {
+        const rawValue = input.value || '';
+        setClearVisibility(rawValue.length > 0);
+        persistSearchValue(rawValue);
+        const trimmed = rawValue.trim();
+        if (!trimmed) {
+          resetSearch('');
+          return;
+        }
+        if (trimmed.length < MIN_CHARS) {
+          resetSearch('Type at least ' + MIN_CHARS + ' characters to filter.');
+          return;
+        }
+        applySearch(trimmed);
+      }
+
+      const initialSearch = readStoredSearchValue();
+      if (initialSearch) {
+        input.value = initialSearch;
+        setClearVisibility(true);
+      }
+
+      input.addEventListener('input', handleInput);
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          input.value = '';
+          setClearVisibility(false);
+          persistSearchValue('');
+          resetSearch('');
+        }
+      });
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+          input.value = '';
+          input.focus();
+          setClearVisibility(false);
+          persistSearchValue('');
+          resetSearch('');
+        });
+      }
+
+      handleInput();
     })();
 
     // Drag & drop ordering for stations --------------------------------------

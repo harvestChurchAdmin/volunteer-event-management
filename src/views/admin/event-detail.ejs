@@ -248,6 +248,36 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
     </div>
   </div>
   <% if (stations.length > 0) { %>
+    <section class="admin-event-search" aria-label="Search event content">
+      <label class="sr-only" for="adminEventSearchInput">Search this event</label>
+      <div class="admin-event-search__field">
+        <span class="admin-event-search__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M11 4a7 7 0 0 1 5.58 11.23l3.6 3.6-1.42 1.42-3.6-3.6A7 7 0 1 1 11 4Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z" fill="currentColor" />
+          </svg>
+        </span>
+        <input
+          id="adminEventSearchInput"
+          type="search"
+          inputmode="search"
+          autocapitalize="none"
+          autocomplete="off"
+          spellcheck="false"
+          minlength="3"
+          placeholder="Search stations, dishes, or volunteers"
+          data-event-search-input>
+        <button type="button"
+                class="admin-event-search__clear"
+                aria-label="Clear search"
+                data-event-search-clear>
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4L13.4 12l5.6-5.6L17.6 5 12 10.6Z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <p class="admin-event-search__hint muted small">Type 3+ characters to filter every station, time block, and volunteer below.</p>
+    </section>
+    <p class="admin-event-search__status muted small" id="adminEventSearchStatus" aria-live="polite"></p>
     <div class="station-grid js-station-list" data-event-id="<%= event.event_id %>" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
   <% stations.forEach((station) => { %>
         <%
@@ -470,7 +500,7 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
                                     <input type="tel" id="reservation-phone-<%= reservation.reservation_id %>" name="phone" value="<%= reservation.phone %>">
                                   </div>
                                   <div class="form-group">
-                                    <label for="reservation-block-<%= reservation.reservation_id %>">Assign to time block</label>
+                                    <label for="reservation-block-<%= reservation.reservation_id %>"><%= isPotluck ? 'Assign to item' : 'Assign to time block' %></label>
                                     <select id="reservation-block-<%= reservation.reservation_id %>" name="block_id">
                                       <% event.stations.forEach(function(optStation) { %>
                                         <%
@@ -482,13 +512,26 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
                                         <optgroup label="<%= isPotluck ? 'Category' : 'Station' %>: <%= optStation.name %>">
                                           <% optBlocks.forEach(function(optBlock) { %>
                                             <option value="<%= optBlock.block_id %>" <%= optBlock.block_id === block.block_id ? 'selected' : '' %>>
-                                              <%= fmt12(optBlock.start_time) %> – <%= fmt12(optBlock.end_time) %>
+                                              <%= isPotluck
+                                                    ? (optBlock.title || '(untitled item)')
+                                                    : (fmt12(optBlock.start_time) + ' – ' + fmt12(optBlock.end_time)) %>
                                             </option>
                                           <% }) %>
                                         </optgroup>
                                       <% }) %>
                                     </select>
                                   </div>
+                                  <% if (isPotluck) { %>
+                                    <div class="form-group full">
+                                      <label for="reservation-dish-<%= reservation.reservation_id %>">Dish name</label>
+                                      <input type="text"
+                                             id="reservation-dish-<%= reservation.reservation_id %>"
+                                             name="dish_note"
+                                             value="<%= reservation.reservation_note || '' %>"
+                                             placeholder="What dish will they bring?"
+                                             required>
+                                    </div>
+                                  <% } %>
                                 </div>
                               </form>
                             <%- include('../partials/modal-end', { id: 'editReservationModal-' + reservation.reservation_id, formId: 'editReservationForm-' + reservation.reservation_id }) %>

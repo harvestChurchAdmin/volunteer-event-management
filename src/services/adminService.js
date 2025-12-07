@@ -559,6 +559,18 @@ function updateReservation(reservationId, payload) {
   const name = payload.name || reservation.volunteer_name;
   const email = payload.email || reservation.volunteer_email;
   const phone = payload.phone || reservation.volunteer_phone || '';
+  const hasDishNoteField = Object.prototype.hasOwnProperty.call(payload, 'dish_note')
+    || Object.prototype.hasOwnProperty.call(payload, 'note');
+  let dishNote = undefined;
+  if (hasDishNoteField) {
+    const raw = payload.dish_note !== undefined ? payload.dish_note : payload.note;
+    if (raw == null) {
+      dishNote = null;
+    } else {
+      const cleaned = String(raw).trim().replace(/^\s*,\s*/, '');
+      dishNote = cleaned.length ? cleaned : null;
+    }
+  }
 
   if (!name || !email) throw createError(400, 'Volunteer name and email are required.');
 
@@ -573,6 +585,10 @@ function updateReservation(reservationId, payload) {
 
   if (payload.block_id && Number(payload.block_id) !== reservation.block_id) {
     dal.admin.moveReservation(reservationId, Number(payload.block_id));
+  }
+
+  if (hasDishNoteField) {
+    dal.admin.updateReservationNote(reservationId, dishNote);
   }
 
   return true;

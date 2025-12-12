@@ -161,6 +161,77 @@ exports.exportEventSkeletonCsv = (req, res, next) => {
 };
 
 /**
+ * Export only the open slots/items so admins can see what still needs to be filled.
+ */
+exports.exportEventNeedsCsv = (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const payload = adminService.getEventOpenNeedsForExport(eventId);
+    if (!payload || !payload.event) return next(new Error('Event not found'));
+
+    const { event, rows } = payload;
+    const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
+    const filenameSafe = String(event.name || 'event').replace(/[^A-Za-z0-9._-]+/g, '_');
+    const filename = `${filenameSafe}_${event.event_id}_needs.csv`;
+
+    function csvEscapeSafe(v) {
+      let s = v == null ? '' : String(v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s;
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    const formatFeeds = (min, max) => {
+      const hasMin = min != null && min !== '';
+      const hasMax = max != null && max !== '';
+      if (hasMin && hasMax) return `${min}-${max}`;
+      if (hasMin) return String(min);
+      if (hasMax) return `≤${max}`;
+      return '';
+    };
+
+    const headers = [
+      'Event',
+      'Event Start',
+      'Event End',
+      'Station/Category',
+      'Item/Block',
+      'Block Start',
+      'Block End',
+      'Feeds',
+      'Slots Needed',
+      'Signed Up',
+      'Slots Remaining'
+    ];
+
+    const lines = [];
+    lines.push(headers.map(csvEscapeSafe).join(','));
+    rows.forEach(r => {
+      const feeds = formatFeeds(r.servings_min, r.servings_max);
+      const blockStart = isPotluck ? '' : (r.block_start || '');
+      const blockEnd = isPotluck ? '' : (r.block_end || '');
+      lines.push([
+        event.name,
+        event.date_start,
+        event.date_end,
+        r.station_name,
+        r.block_title,
+        blockStart,
+        blockEnd,
+        feeds,
+        r.capacity_needed,
+        r.reserved_count,
+        r.open_slots
+      ].map(csvEscapeSafe).join(','));
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(lines.join('\n'));
+  } catch (e) { next(e); }
+};
+
+/**
  * Export the event roster (volunteers) as a CSV, arranged by time, date, and station.
  */
 exports.exportEventCsv = (req, res, next) => {

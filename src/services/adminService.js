@@ -39,6 +39,45 @@ function cmpLocal(a, b) {
   return Au - Bu;
 }
 
+function safeCanonicalLocal(txt) {
+  if (!txt) return null;
+  try {
+    return toCanonicalLocalString(String(txt));
+  } catch (err) {
+    return null;
+  }
+}
+
+function sortBlocksForExport(blocks, isPotluck) {
+  const list = Array.isArray(blocks) ? blocks.slice() : [];
+  if (list.length <= 1) return list;
+  const orderValue = (val) => {
+    const num = Number(val);
+    return Number.isFinite(num) ? num : 0;
+  };
+  return list.sort((a, b) => {
+    if (isPotluck) {
+      const ao = orderValue(a && a.item_order);
+      const bo = orderValue(b && b.item_order);
+      if (ao !== bo) return ao - bo;
+      const aid = Number(a && a.block_id) || 0;
+      const bid = Number(b && b.block_id) || 0;
+      return aid - bid;
+    }
+    const aStart = safeCanonicalLocal(a && a.start_time);
+    const bStart = safeCanonicalLocal(b && b.start_time);
+    if (aStart && bStart) {
+      const cmp = cmpLocal(aStart, bStart);
+      if (cmp) return cmp;
+    } else if (aStart || bStart) {
+      return aStart ? -1 : 1;
+    }
+    const aid = Number(a && a.block_id) || 0;
+    const bid = Number(b && b.block_id) || 0;
+    return aid - bid;
+  });
+}
+
 /**
  * Allow "Feeds" min/max to be optional in forms. Returns `{ provided, value }`
  * where `provided` tells us if the field was present (even if blank) and
@@ -247,6 +286,60 @@ function getEventRosterForExport(eventId, opts = {}) {
   }));
 
   return { event, rows: rowsOut };
+}
+
+/**
+ * Create a flattened list of blocks/items that still have open capacity so
+ * coordinators can see what needs to be filled.
+ */
+function getEventOpenNeedsForExport(eventId) {
+  const event = getEventDetailsForAdmin(eventId);
+  if (!event) return null;
+
+  const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
+  const rows = [];
+  const stations = Array.isArray(event.stations) ? event.stations : [];
+
+  stations.forEach(station => {
+    const sortedBlocks = sortBlocksForExport(
+      Array.isArray(station.time_blocks) ? station.time_blocks : [],
+      isPotluck
+    );
+    sortedBlocks.forEach(block => {
+      const rawCapacity = Number(block && block.capacity_needed);
+      const capacity = Number.isFinite(rawCapacity) ? rawCapacity : 0;
+      if (capacity <= 0) return;
+
+      const rawReserved = Number(block && block.reserved_count);
+      const reservedCount = Array.isArray(block && block.reservations)
+        ? block.reservations.length
+        : (Number.isFinite(rawReserved) ? rawReserved : 0);
+      const openSlots = Math.max(0, capacity - reservedCount);
+      if (openSlots <= 0) return;
+
+      rows.push({
+        event_id: event.event_id,
+        event_name: event.name,
+        event_start: event.date_start,
+        event_end: event.date_end,
+        station_id: station.station_id,
+        station_name: station.name,
+        station_about: station.about || station.description || '',
+        station_duties: station.duties || '',
+        block_id: block.block_id,
+        block_title: block.title || '',
+        block_start: block.start_time || '',
+        block_end: block.end_time || '',
+        servings_min: block.servings_min,
+        servings_max: block.servings_max,
+        capacity_needed: capacity,
+        reserved_count: reservedCount,
+        open_slots: openSlots
+      });
+    });
+  });
+
+  return { event, rows };
 }
 
 /**
@@ -687,4 +780,5 @@ module.exports = {
   deleteStation,
   deleteTimeBlock,
   getEventRosterForExport,
+  getEventOpenNeedsForExport,
 };

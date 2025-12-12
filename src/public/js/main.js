@@ -41,6 +41,71 @@ document.addEventListener('DOMContentLoaded', () => {
   } catch (_) {}
   console.log('DOM fully loaded. Initializing scripts.');
 
+  function fallbackCopyText(text) {
+    return new Promise((resolve, reject) => {
+      try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.setAttribute('readonly', '');
+        el.style.position = 'fixed';
+        el.style.top = '-999px';
+        el.style.left = '-999px';
+        document.body.appendChild(el);
+        el.select();
+        el.setSelectionRange(0, el.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        if (ok) resolve();
+        else reject(new Error('Copy command failed'));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  function copyTextToClipboard(text) {
+    if (!text) return Promise.reject(new Error('Nothing to copy'));
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      return navigator.clipboard.writeText(text).catch(() => fallbackCopyText(text));
+    }
+    return fallbackCopyText(text);
+  }
+
+  // Share link buttons (admin + public pages) -------------------------------
+  (function initShareLinkCopyButtons() {
+    const buttons = document.querySelectorAll('[data-copy-share-link]');
+    if (!buttons.length) return;
+    buttons.forEach((btn) => {
+      if (btn.dataset.shareHandlerAttached === '1') return;
+      btn.dataset.shareHandlerAttached = '1';
+      const defaultLabel = btn.getAttribute('data-label-default') || 'Copy link';
+      const successLabel = btn.getAttribute('data-label-success') || 'Copied!';
+      const errorLabel = btn.getAttribute('data-label-error') || 'Unable to copy';
+      const labelEl = btn.querySelector('.share-link__copy-label') || btn;
+
+      function resetState() {
+        btn.classList.remove('is-busy');
+        btn.classList.remove('is-copied');
+        if (labelEl) labelEl.textContent = defaultLabel;
+      }
+
+      btn.addEventListener('click', () => {
+        const value = btn.getAttribute('data-copy-share-link');
+        if (!value) return;
+        btn.classList.add('is-busy');
+        copyTextToClipboard(value).then(() => {
+          btn.classList.add('is-copied');
+          if (labelEl) labelEl.textContent = successLabel;
+          setTimeout(() => resetState(), 2000);
+        }).catch(() => {
+          btn.classList.remove('is-copied');
+          if (labelEl) labelEl.textContent = errorLabel;
+          setTimeout(() => resetState(), 2500);
+        });
+      });
+    });
+  })();
+
   // ---- (Admin pages) datepicker initialization handled in admin JS when a modal opens ----
 
   // Responsive navigation toggle
@@ -1301,6 +1366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // restore state
     if (localStorage.getItem(debugKey)) toggleDebug(true);
   })();
+
 });
   // Generic datetime -> hidden canonical sync for any form using .datetime-field
   try {

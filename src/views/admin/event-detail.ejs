@@ -79,6 +79,10 @@ const isPublic = publishState === 'published';
 const sharePath = '/events/' + event.event_id;
 const absoluteShareUrl = (typeof shareUrl === 'string' && shareUrl) ? shareUrl : sharePath;
 const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
+const manageViewHref = isDraft
+  ? (sharePath + '?preview=1&return=' + encodeURIComponent('/admin/event/' + event.event_id))
+  : (sharePath + '?return=' + encodeURIComponent('/admin/event/' + event.event_id));
+const manageViewLabel = isDraft ? 'Preview public page' : (isPrivate ? 'Open private link' : 'View public page');
 %>
 
 <!-- Page header: core event metadata + publish/delete actions -->
@@ -124,44 +128,71 @@ const shareUrlDisplay = absoluteShareUrl.replace(/^https?:\/\//i, '');
   </div>
   <div class="page-header__actions page-header__actions--flush-right">
     <div class="header-actions__row">
-      <a class="btn-link"
-         href="<%= isDraft
-           ? (sharePath + '?preview=1&return=' + encodeURIComponent('/admin/event/' + event.event_id))
-           : (sharePath + '?return=' + encodeURIComponent('/admin/event/' + event.event_id)) %>">
-        <%= isDraft ? 'Preview public page' : (isPrivate ? 'Open private link' : 'View public page') %>
-      </a>
       <details class="dropdown dropdown--float">
         <summary class="btn btn-accent">Actions</summary>
-        <div class="dropdown__menu">
-          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/print?auto=1" target="_blank" rel="noopener">
-            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 9V3h12v6h2a2 2 0 0 1 2 2v6h-4v4H8v-4H4v-6a2 2 0 0 1 2-2h0Zm2-4v4h8V5H8Zm8 10H8v4h8v-4Z"/></svg>
-            Printable PDF
-          </a>
-          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
-            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v2H5V4Zm0 5h14v2H5V9Zm0 5h8v2H5v-2Z"/></svg>
-            Export skeleton (no contacts)
-          </a>
-          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
-            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
-            Quick Export
-          </a>
-          <button class="dropdown__link" data-open="#exportCsvModal" type="button">
-            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
-            Advanced Export
-          </button>
-          <button class="dropdown__link" data-open="#editEventModal" type="button">
-            <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
-            Edit event…
-          </button>
-          <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item"
-                data-confirm="Delete this event and all associated stations, time blocks, and volunteers? This cannot be undone."
-                data-confirm-cta="Delete">
-            <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-            <button type="submit" class="dropdown__link btn-danger">
-              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
-              Delete event
+        <div class="dropdown__menu dropdown__menu--sections">
+          <div class="dropdown__section" role="group" aria-label="Manage">
+            <p class="dropdown__section-label">Manage</p>
+            <a class="dropdown__link" href="<%= manageViewHref %>">
+              <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3Zm5 14v4H5V5h4V3H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4h-2Z"/></svg>
+              </span>
+              <span class="dropdown__link-text"><%= manageViewLabel %></span>
+            </a>
+            <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/print?auto=1" target="_blank" rel="noopener">
+              <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 9V3h12v6h2a2 2 0 0 1 2 2v6h-4v4H8v-4H4v-6a2 2 0 0 1 2-2h0Zm2-4v4h8V5H8Zm8 10H8v4h8v-4Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Printable PDF</span>
+            </a>
+            <button class="dropdown__link" data-open="#editEventModal" type="button">
+              <span class="dropdown__icon-badge dropdown__icon-badge--primary">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.25V20h2.75l8.086-8.086-2.75-2.75L4 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.33-2.33a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Edit event…</span>
             </button>
-          </form>
+          </div>
+          <div class="dropdown__section" role="group" aria-label="Tools">
+            <p class="dropdown__section-label">Tools</p>
+            <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-skeleton.csv">
+              <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v12h2V4h10V2Zm4 4H9a2 2 0 0 0-2 2v14h12a2 2 0 0 0 2-2V6Zm-2 14H9V6h8v12ZM12 11l-3 3h2v4h2v-4h2l-3-3Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Export skeleton (no contacts)</span>
+            </a>
+            <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-needs.csv">
+              <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h8v2H4V6Zm0 5h8v2H4v-2Zm0 5h8v2H4v-2Zm9.6-6.6 1.4-1.4L17 12l3-3 1.4 1.4-4.4 4.4-3.4-3.4Zm0 6 1.4-1.4L17 18l3-3 1.4 1.4-4.4 4.4-3.4-3.4Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Open needs export</span>
+            </a>
+            <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export.csv">
+              <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3v10.586l3.293-3.293 1.414 1.414L12 17.414l-4.707-4.707 1.414-1.414L11 13.586V3h1ZM5 19h14v2H5z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Quick export</span>
+            </a>
+            <button class="dropdown__link" data-open="#exportCsvModal" type="button">
+              <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+                <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3V5Zm0 6h18v2H3v-2Zm0 6h18v2H3v-2Z"/></svg>
+              </span>
+              <span class="dropdown__link-text">Advanced export</span>
+            </button>
+          </div>
+          <div class="dropdown__section dropdown__section--danger" role="group" aria-label="Danger zone">
+            <p class="dropdown__section-label">Danger zone</p>
+            <form action="/admin/event/<%= event.event_id %>/delete" method="POST" class="inline-form js-confirm dropdown__item"
+                  data-confirm="Delete this event and all associated stations, time blocks, and volunteers? This cannot be undone."
+                  data-confirm-cta="Delete">
+              <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+              <button type="submit" class="dropdown__link btn-danger">
+                <span class="dropdown__icon-badge dropdown__icon-badge--danger">
+                  <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm2-3h8l1 2H7l1-2Z"/></svg>
+                </span>
+                <span class="dropdown__link-text">Delete event</span>
+              </button>
+            </form>
+          </div>
         </div>
       </details>
     </div>

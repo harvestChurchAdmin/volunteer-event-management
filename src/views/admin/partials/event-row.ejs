@@ -7,6 +7,9 @@
   const statusText = isPublic ? 'Published' : (isPrivate ? 'Private link' : 'Draft');
   const sortStatus = (isPast ? 'past_' : 'upcoming_') + publishState;
   const sharePath = '/events/' + event.event_id;
+  const tooltipDraft = 'Draft: Use while editing or planning. Hidden everywhere except for admins.';
+  const tooltipPrivate = 'Private: Keeps the event off the public list but anyone with the link can sign up.';
+  const tooltipPublic = 'Public: Visible to everyone browsing the site and accessible via a direct link.';
 %>
 <tr class="event-row <%= 'event-row--' + publishState %> <%= isPast ? 'event-row--past' : '' %>"
     data-event-id="<%= event.event_id %>"
@@ -75,7 +78,11 @@
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <input type="hidden" name="publish_state" value="published">
             <input type="hidden" name="redirectTo" value="/admin/dashboard">
-            <button type="submit" class="dropdown__link" <%= isPublic ? 'disabled' : '' %>>
+            <button type="submit"
+                    class="dropdown__link"
+                    <%= isPublic ? 'disabled' : '' %>
+                    title="<%= tooltipPublic %>"
+                    aria-label="Set visibility to Public. <%= tooltipPublic %>">
               <span class="dropdown__icon-badge dropdown__icon-badge--live">
                 <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 10V3H3v18h18V10h-8Zm-8 9V5h6v5h5v9H5Zm12-9v-2h2v2h-2Z"/></svg>
               </span>
@@ -86,7 +93,10 @@
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <input type="hidden" name="publish_state" value="private">
             <input type="hidden" name="redirectTo" value="/admin/dashboard">
-            <button type="submit" class="dropdown__link">
+            <button type="submit"
+                    class="dropdown__link"
+                    title="<%= tooltipPrivate %>"
+                    aria-label="Set visibility to Private. <%= tooltipPrivate %>">
               <span class="dropdown__icon-badge dropdown__icon-badge--private">
                 <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17 8V6a5 5 0 0 0-10 0v2H5v12h14V8h-2Zm-8-2a3 3 0 1 1 6 0v2H9V6Zm8 12H7v-6h10v6Z"/></svg>
               </span>
@@ -97,7 +107,10 @@
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <input type="hidden" name="publish_state" value="draft">
             <input type="hidden" name="redirectTo" value="/admin/dashboard">
-            <button type="submit" class="dropdown__link">
+            <button type="submit"
+                    class="dropdown__link"
+                    title="<%= tooltipDraft %>"
+                    aria-label="Set visibility to Draft. <%= tooltipDraft %>">
               <span class="dropdown__icon-badge dropdown__icon-badge--warning">
                 <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm4 18H6V4h7v5h5v11ZM12 11l-3 3h2v4h2v-4h2l-3-3Z"/></svg>
               </span>
@@ -112,6 +125,12 @@
               <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v12h2V4h10V2Zm4 4H9a2 2 0 0 0-2 2v14h12a2 2 0 0 0 2-2V6Zm-2 14H9V6h8v12ZM12 11l-3 3h2v4h2v-4h2l-3-3Z"/></svg>
             </span>
             <span class="dropdown__link-text">Export skeleton (no contacts)</span>
+          </a>
+          <a class="dropdown__link" href="/admin/event/<%= event.event_id %>/export-needs.csv">
+            <span class="dropdown__icon-badge dropdown__icon-badge--muted">
+              <svg class="dropdown__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h8v2H4V6Zm0 5h8v2H4v-2Zm0 5h8v2H4v-2Zm9.6-6.6 1.4-1.4L17 12l3-3 1.4 1.4-4.4 4.4-3.4-3.4Zm0 6 1.4-1.4L17 18l3-3 1.4 1.4-4.4 4.4-3.4-3.4Z"/></svg>
+            </span>
+            <span class="dropdown__link-text">Open needs export</span>
           </a>
           <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a copy of this event (stations and time blocks only)?" data-confirm-cta="Copy">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">

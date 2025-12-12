@@ -36,7 +36,16 @@ exports.showEventsList = (req, res, next) => {
             if (Number.isNaN(bt)) return -1;
             return at - bt;
         });
-        res.render('public/events-list', { title: 'Upcoming Events', events: sortedEvents, helpers });
+        const envBase = (process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
+        const requestHost = req.get && req.get('host') ? req.get('host') : '';
+        const requestBase = (req.protocol && requestHost) ? `${req.protocol}://${requestHost}` : '';
+        const shareBaseUrl = envBase || requestBase || '';
+        res.render('public/events-list', {
+            title: 'Upcoming Events',
+            events: sortedEvents,
+            helpers,
+            shareBaseUrl
+        });
     } catch (error) { 
         console.error("--- ERROR IN showEventsList Controller ---", error);
         next(error); 

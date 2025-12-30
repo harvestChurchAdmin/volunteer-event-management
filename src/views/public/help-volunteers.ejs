@@ -10,7 +10,7 @@
   <div>
     <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
     <h1>Volunteer help</h1>
-    <p class="muted">Step-by-step guidance for browsing events, signing up, editing your picks, and getting support.</p>
+    <p class="muted">Plain-language steps for browsing events, signing up, fixing mistakes, and getting support. No tech skills required.</p>
     <% if (supportEmail) { %>
       <p class="muted small">Need direct help? Email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a>.</p>
     <% } else { %>
@@ -21,40 +21,36 @@
 
 <section class="page-section page-shell">
   <article class="card card--plain">
-    <h2>Finding an event</h2>
+    <h2>Quick start</h2>
     <ol class="muted">
-      <li>Go to the <a href="/events">Sign-ups</a> page. You’ll see all public events with dates and descriptions.</li>
-      <li>Tap/click an event’s “View sign-ups” button (or “Sign Up for Food Prep” when it’s a food prep event) to open its details.</li>
-      <li>Use the browser Back button or the “Back to sign-ups” link to return to the list.</li>
+      <li>Open the <a href="/events">Sign-ups</a> page. You’ll see the events that are open right now.</li>
+      <li>Press “View sign-ups” (or “Sign Up for Food Prep”) on the event you want.</li>
+      <li>Follow the steps shown on the page. You can always tap “Back to sign-ups” to change events.</li>
     </ol>
   </article>
 </section>
 
 <section class="page-section page-shell">
   <article class="card card--plain">
-    <h2>Signing up (scheduled events)</h2>
+    <h2>If the event uses time slots</h2>
     <ol class="muted">
-      <li>Open the event and review the date/time at the top.</li>
-      <li>Scroll to “Step 1: Select opportunities.” Each station shows available time slots.</li>
-      <li>Pick a slot: press “Select” on a time that fits you. Full slots are labeled “Full”.</li>
-      <li>(Optional) Switch to “View selections by: Date & time” if you want to see everything sorted chronologically.</li>
-      <li>Press “Continue” (or the next step) to enter your Name, Email, and Phone.</li>
-      <li>Submit. You’ll see confirmation along with a “manage link” to edit later (keep the email). </li>
+      <li>Step 1: Type your name and email. Add each person who might serve (each name must be different).</li>
+      <li>Step 2: For each time block, pick the person from the dropdown and press “Assign.” We block overlapping times for the same person automatically.</li>
+      <li>Step 3: Press “Submit,” skim the review screen, then confirm. We’ll email you a link to edit later.</li>
     </ol>
-    <p class="muted small">Mobile tip: tap the station row to scroll horizontally only if needed; buttons are touch-friendly.</p>
+    <p class="muted small">On a phone: scroll slowly, pick a person, then press “Assign.” If a time says “Full,” choose another.</p>
   </article>
 </section>
 
 <section class="page-section page-shell">
   <article class="card card--plain">
-    <h2>Signing up (food prep / items)</h2>
+    <h2>If the event is Food Prep / Potluck</h2>
     <ol class="muted">
-      <li>Open the event. Categories (e.g., Main dishes, Drinks) list items you can prepare.</li>
-      <li>Press “Sign up” next to an item. If it’s full, choose another or ask if more can be added.</li>
-      <li>If the item requests a note (e.g., dish name), fill it in when asked.</li>
-      <li>Enter your Name, Email, and Phone, then submit. Keep the manage link emailed to you.</li>
+      <li>Step 1: Type your contact info and the names of people helping you.</li>
+      <li>Step 2: Pick an item, choose the person bringing it, and type the dish name. Press “Assign.”</li>
+      <li>Step 3: Press “Submit,” check the quick review, then confirm. You’ll get an email with a link to edit.</li>
     </ol>
-    <p class="muted small">Duplicates are okay unless the coordinator says otherwise; serving size hints (Feeds) show how many people an item should cover.</p>
+    <p class="muted small">Hints like “Feeds 6–8” show how big the dish should be. If an item is full, pick another.</p>
   </article>
 </section>
 
@@ -62,9 +58,9 @@
   <article class="card card--plain">
     <h2>Editing or canceling your signup</h2>
     <ol class="muted">
-      <li>Open the manage link from your confirmation email. Lost it? Use “Already signed up? Email me my manage link” on the event page.</li>
-      <li>On the Manage page, change selections (add/remove slots or items) and submit.</li>
-      <li>To fully cancel, unselect all slots/items and submit. You’ll see confirmation.</li>
+      <li>Use the manage link from your confirmation email. Lost it? On the event page, click “Already signed up?” and we’ll email the link again.</li>
+      <li>On the Manage page you can rename people, reassign a time or item, or remove a slot. Use the dropdown next to each slot/item to switch the person.</li>
+      <li>To cancel everything, remove all assignments and submit. We’ll clean up the record once it’s empty.</li>
     </ol>
     <p class="muted small">Always submit changes so the roster updates for coordinators.</p>
   </article>
@@ -74,9 +70,11 @@
   <article class="card card--plain">
     <h2>Troubleshooting</h2>
     <ul class="muted">
+      <li><strong>Overlap warning:</strong> if a participant conflicts, pick another participant or change the conflicting time. Overlapping is blocked for the same person.</li>
       <li><strong>Slots show “Full”:</strong> choose another time or station; check back later in case capacity is increased.</li>
       <li><strong>No confirmation email:</strong> check Promotions/Spam; request the manage link via the event page form; <% if (supportEmail) { %>or email <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>or try again later<% } %>.</li>
-      <li><strong>Can’t submit:</strong> make sure you selected at least one slot/item and filled in name/email; refresh and try again if needed.</li>
+      <li><strong>Duplicate email:</strong> If you try to start a new signup with an email that already has selections, we’ll stop you and resend the manage link so you can edit the existing signup instead of creating another.</li>
+      <li><strong>Can’t submit:</strong> make sure you assigned at least one slot/item, provided participant names, and filled in required contact info.</li>
       <li><strong>On mobile:</strong> keep the page open until you see the success screen; avoid using the browser back button during form submission.</li>
     </ul>
   </article>

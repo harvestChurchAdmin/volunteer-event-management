@@ -18,8 +18,8 @@ exports.validateSignup = [
         .custom(v => !(/[\r\n]/.test(v))).withMessage('Email contains invalid characters.'),
     body('phone')
         .trim()
-        .notEmpty().withMessage('Phone number is required.')
         .custom(value => {
+            if (value == null || String(value).trim() === '') return true;
             const digits = String(value || '').replace(/\D/g, '');
             if (digits.length !== 10) {
                 throw new Error('Phone number must be 10 digits.');

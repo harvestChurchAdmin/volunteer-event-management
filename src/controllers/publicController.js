@@ -92,103 +92,65 @@ exports.showEventDetail = (req, res, next) => {
 
 exports.handleSignup = async (req, res, next) => {
     const errors = validationResult(req);
-    const eventId = req.body.eventId || req.body.event_id || req.body.event;
-    // Accept both blockIds and blockIds[] field names; coerce single value to array
-    let blockIds = [];
-    if (Array.isArray(req.body.blockIds)) blockIds = req.body.blockIds;
-    else if (typeof req.body.blockIds === 'string') blockIds = [req.body.blockIds];
-    else if (Array.isArray(req.body['blockIds[]'])) blockIds = req.body['blockIds[]'];
-    else if (typeof req.body['blockIds[]'] === 'string') blockIds = [req.body['blockIds[]']];
-
-    // Redirect back to the event page if the eventId is missing (debug-friendly)
-    if (!eventId) {
-        if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
-          try { req.flash('debug', JSON.stringify({ error: 'Missing eventId', body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
-        }
-        return res.redirect('/events');
+    let payload = {};
+    try {
+      payload = JSON.parse(req.body.registration_payload || '{}');
+    } catch (_) {
+      payload = {};
+    }
+    payload.eventId = payload.eventId || req.body.eventId || req.body.event_id || req.body.event;
+    if (!payload.registrant) {
+      payload.registrant = {
+        name: req.body.name,
+        email: req.body.email,
+        phone: req.body.phone
+      };
     }
 
-    if (!blockIds || blockIds.length === 0) {
-        const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
-        req.flash('error', 'You must select at least one time slot.');
-        if (debug) {
-          try { req.flash('debug', JSON.stringify({ error: 'No blockIds received', body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
-          const evt = publicService.getEventDetailsForPublic(eventId);
-          return res.status(400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
-        }
-        return res.redirect(`/events/${eventId}`);
+    if (!payload.eventId) {
+      if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
+        try { req.flash('debug', JSON.stringify({ error: 'Missing eventId', body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
+      }
+      return res.redirect('/events');
     }
 
     if (!errors.isEmpty()) {
-        const errs = errors.array();
-        const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
-        errs.forEach(error => req.flash('error', error.msg));
-        if (debug) {
-          try { req.flash('debug', JSON.stringify({ validationErrors: errs, body: redactRequestBody(req.body) }, null, 2)); } catch (_) {}
-        }
-
-        const evt = publicService.getEventDetailsForPublic(eventId);
-        if (!evt) {
-          return res.redirect('/events');
-        }
-
-        const formDefaults = {
-          name: (req.body && req.body.name) || '',
-          email: (req.body && req.body.email) || '',
-          phone: (req.body && req.body.phone) || ''
-        };
-
-        const selectedBlockIds = Array.isArray(blockIds) ? blockIds : [];
-
-        const rawDishNotes = (req.body && req.body.dish_notes) || {};
-        const draftDishNotes = {};
-        if (rawDishNotes && typeof rawDishNotes === 'object') {
-          Object.keys(rawDishNotes).forEach(key => {
-            if (!Object.prototype.hasOwnProperty.call(rawDishNotes, key)) return;
-            draftDishNotes[key] = String(rawDishNotes[key] || '');
-          });
-        }
-
-        return res.status(400).render('public/event-detail', {
-          title: (evt && evt.name) || 'Event',
-          event: evt,
-          helpers,
-          formDefaults,
-          selectedBlockIds,
-          draftDishNotes,
-          messages: req.flash()
-        });
+      const errs = errors.array();
+      errs.forEach(error => req.flash('error', error.msg));
+      const evt = publicService.getEventDetailsForPublic(payload.eventId);
+      return res.status(400).render('public/event-detail', {
+        title: (evt && evt.name) || 'Event',
+        event: evt,
+        helpers,
+        draftRegistration: payload,
+        messages: req.flash()
+      });
     }
-    
+
     try {
-        const volunteerData = { name: req.body.name, email: req.body.email, phone: req.body.phone };
-        const dishNotes = req.body.dish_notes || {};
-        const result = await publicService.processVolunteerSignup(volunteerData, blockIds, dishNotes);
-        res.render('public/success', {
-          title: 'Sign-up Successful!',
-          count: result.count,
-          manageUrl: result.manageUrl,
-          alreadyRegistered: result.alreadyRegistered,
-          volunteerEmail: volunteerData.email
-        });
+      const result = await publicService.processVolunteerSignup(payload);
+      res.render('public/success', {
+        title: 'Sign-up Successful!',
+        count: 1,
+        manageUrl: result.manageUrl,
+        alreadyRegistered: result.alreadyRegistered,
+        volunteerEmail: payload.registrant ? payload.registrant.email : req.body.email
+      });
     } catch (error) {
-        console.error(`--- ERROR IN handleSignup for eventId: ${eventId} ---`, error);
-        const debug = (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production');
-        req.flash('error', error.message || 'We could not process your signup.');
-        if (debug) {
-          const debugBlob = {
-            eventId,
-            blockIds,
-            dish_notes: req.body && req.body.dish_notes ? '[redacted]' : undefined,
-            status: error.status || undefined,
-            code: error.code || undefined,
-            message: error.message,
-            };
-          try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
-          const evt = publicService.getEventDetailsForPublic(eventId);
-          return res.status(error.status || 400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers });
-        }
-        res.redirect(`/events/${eventId}`);
+      console.error(`--- ERROR IN handleSignup for eventId: ${payload.eventId} ---`, error);
+      req.flash('error', error.message || 'We could not process your signup.');
+      if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
+        const debugBlob = {
+          eventId: payload.eventId,
+          status: error.status || undefined,
+          code: error.code || undefined,
+          message: error.message,
+        };
+        try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
+        const evt = publicService.getEventDetailsForPublic(payload.eventId);
+        return res.status(error.status || 400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers, draftRegistration: payload });
+      }
+      res.redirect(`/events/${payload.eventId}`);
     }
 };
 
@@ -201,25 +163,36 @@ exports.showManageSignup = (req, res, next) => {
             return res.redirect('/events');
         }
 
-        const { event, reservations } = context;
-        const selectedBlockIds = reservations.map(r => r.block_id);
+        const { event, participants, registration } = context;
+        const assignmentsData = {
+          participants: participants || []
+        };
+        const selectedBlockIds = [];
+        (participants || []).forEach(p => {
+          (p.schedule || []).forEach(a => selectedBlockIds.push(a.time_block_id));
+          (p.potluck || []).forEach(a => selectedBlockIds.push(a.item_id));
+        });
         const emailPreferences = {
-            optIn: Number(context.token.email_opt_in ?? 1) !== 0,
-            optedOutAt: context.token.email_opted_out_at || null,
-            optedOutReason: context.token.email_opt_out_reason || null,
-            volunteerEmail: context.token.volunteer_email || ''
+            optIn: Number(registration.email_opt_in ?? 1) !== 0,
+            optedOutAt: registration.email_opted_out_at || null,
+            optedOutReason: registration.email_opt_out_reason || null,
+            volunteerEmail: registration.registrant_email || ''
         };
 
-        // Do not pass messages here; app middleware already exposed res.locals.messages
-        // Passing messages: req.flash() would consume and clear success flashes before render.
+        const debugCapacity = String(req.query.debug || '').toLowerCase() === 'capacity';
+
         res.render('public/manage-signup', {
             title: `Manage ${event.name}`,
             event,
             token,
-            reservations,
+            registration,
+            participants,
+            assignmentsJson: JSON.stringify(assignmentsData),
             selectedBlockIds,
             helpers,
-            emailPreferences
+            emailPreferences,
+            query: req.query,
+            debugCapacity
         });
     } catch (error) {
         console.error('--- ERROR IN showManageSignup ---', error);
@@ -229,34 +202,73 @@ exports.showManageSignup = (req, res, next) => {
 
 exports.updateManageSignup = async (req, res, next) => {
   const token = req.params.token;
-  const blockIds = Array.isArray(req.body.blockIds)
-        ? req.body.blockIds
-        : (req.body['blockIds[]'] ? [].concat(req.body['blockIds[]']) : []);
+  const action = req.body.action || '';
+  const debugCapacity = String(req.query.debug || '').toLowerCase() === 'capacity';
 
   try {
-        const dishNotes = req.body.dish_notes || {};
-        await publicService.updateVolunteerSignup(token, blockIds, dishNotes);
-        req.flash('success', 'Your volunteer schedule has been updated. Check your email for confirmation.');
-        res.redirect(`/manage/${token}`);
-    } catch (error) {
-        console.error('--- ERROR IN updateManageSignup ---', error);
-        req.flash('error', error.message || 'Unable to update your schedule.');
-        if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
-          const debugBlob = {
-            token,
-            blockIds,
-            dish_notes: req.body && req.body.dish_notes ? '[redacted]' : undefined,
-            status: error.status || undefined,
-            code: error.code || undefined,
-            message: error.message,
-          };
-          try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
-        }
-        if (error.status === 410) {
-            return res.redirect('/events');
-        }
-        res.redirect(`/manage/${token}`);
+    if (action === 'rename') {
+      await publicService.renameParticipant(token, Number(req.body.participantId || req.body.participant_id), req.body.name || req.body.participant_name);
+      req.flash('success', 'Participant name updated.');
+      return res.redirect(`/manage/${token}`);
     }
+    if (action === 'add') {
+      await publicService.addParticipant(token, req.body.name || req.body.participant_name);
+      req.flash('success', 'Participant added.');
+      return res.redirect(`/manage/${token}`);
+    }
+    if (action === 'merge') {
+      await publicService.mergeParticipants(token, Number(req.body.fromId || req.body.from_id), Number(req.body.toId || req.body.to_id));
+      req.flash('success', 'Participants merged.');
+      return res.redirect(`/manage/${token}`);
+    }
+    if (action === 'delete') {
+      const removeAssignments = String(req.body.removeAssignments || req.body.remove_assignments || '') === '1';
+      await publicService.deleteParticipant(token, Number(req.body.participantId || req.body.participant_id), removeAssignments);
+      req.flash('success', 'Participant removed.');
+      return res.redirect(`/manage/${token}`);
+    }
+
+    let payload = {};
+    try {
+      payload = JSON.parse(req.body.registration_payload || '{}');
+    } catch (_) {
+      payload = {};
+    }
+    const scheduleAssignments = payload.scheduleAssignments || [];
+    const potluckAssignments = payload.potluckAssignments || [];
+
+    const result = await publicService.updateVolunteerSignup(token, scheduleAssignments, potluckAssignments, { debugCapacity });
+    if (debugCapacity && result && result.debug) {
+      req.flash('debug', JSON.stringify(result.debug, null, 2));
+    }
+    if (result && result.deleted) {
+      req.flash('success', 'Your selections have been cleared.');
+      return res.redirect(result.eventId ? `/events/${result.eventId}` : '/events');
+    }
+    req.flash('success', 'Your volunteer schedule has been updated. Check your email for confirmation.');
+    res.redirect(`/manage/${token}${debugCapacity ? '?debug=capacity' : ''}`);
+  } catch (error) {
+    console.error('--- ERROR IN updateManageSignup ---', error);
+    req.flash('error', error.message || 'Unable to update your schedule.');
+    if (debugCapacity && error && error.debug) {
+      try {
+        req.flash('debug', JSON.stringify(error.debug, null, 2));
+      } catch (_) {}
+    }
+    if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
+      const debugBlob = {
+        token,
+        status: error.status || undefined,
+        code: error.code || undefined,
+        message: error.message,
+      };
+      try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
+    }
+    if (error.status === 410) {
+      return res.redirect('/events');
+    }
+    res.redirect(`/manage/${token}${debugCapacity ? '?debug=capacity' : ''}`);
+  }
 };
 
 exports.updateEmailPreference = async (req, res) => {
@@ -278,6 +290,22 @@ exports.updateEmailPreference = async (req, res) => {
       return res.redirect('/events');
     }
     return res.redirect(`/manage/${token}`);
+  }
+};
+
+// AJAX: check if a registration already exists for this event/email; if so, send manage link(s).
+exports.checkDuplicateRegistration = async (req, res) => {
+  try {
+    const eventId = req.body.eventId || req.body.event_id || req.body.event;
+    const email = (req.body.email || '').trim();
+    if (!eventId || !email) {
+      return res.status(400).json({ ok: false, error: 'Missing event or email.' });
+    }
+    const result = await publicService.checkDuplicateRegistration(eventId, email);
+    return res.json(result);
+  } catch (err) {
+    console.error('--- ERROR IN checkDuplicateRegistration ---', err);
+    return res.status(500).json({ ok: false, error: 'Unable to check duplicates.' });
   }
 };
 

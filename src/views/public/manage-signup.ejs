@@ -8,7 +8,9 @@
 <% const supportEmail = brandInfo.supportContactEmail || ''; %>
 <% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
 <% const emailPrefs = (typeof emailPreferences !== 'undefined' && emailPreferences) ? emailPreferences : { optIn: true, volunteerEmail: '' }; %>
+<% const debugCapacity = query && String(query.debug || '').toLowerCase() === 'capacity'; %>
 <% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
+<% const potluckNotes = {}; (participants || []).forEach(function(p){ (p.potluck || []).forEach(function(a){ potluckNotes[a.item_id] = a.dish_name || ''; }); }); %>
 
 <section class="page-header page-shell">
   <div>
@@ -18,6 +20,9 @@
       <p class="page-subtitle"><%= _s.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) %> — <%= _s.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %> to <%= _e.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %></p>
     <% } else { %>
       <p class="page-subtitle"><%= fmt12(event.date_start) %> — <%= fmt12(event.date_end) %></p>
+    <% } %>
+    <% if (debugCapacity && messages && messages.debug && messages.debug.length) { %>
+      <pre class="debug-block"><%= messages.debug[0] %></pre>
     <% } %>
   </div>
   <div class="page-header__actions">
@@ -43,7 +48,69 @@
   </article>
 </section>
 
-<%- include('../partials/messages') %>
+<section class="page-shell flash-shell">
+  <%- include('../partials/messages') %>
+</section>
+
+<section class="page-section page-shell">
+  <h3 class="step-heading">Step 1: Manage participants</h3>
+<article class="card card--plain signup-panel participant-panel">
+    <div class="participant-layout">
+      <div class="participant-list">
+        <% (participants || []).forEach(function(p) { %>
+          <div class="participant-row">
+            <form action="/manage/<%= token %>" method="POST" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+              <input type="hidden" name="action" value="rename">
+              <input type="hidden" name="participantId" value="<%= p.participant_id %>">
+              <label class="sr-only" for="rename-<%= p.participant_id %>">Rename</label>
+              <input id="rename-<%= p.participant_id %>" name="name" type="text" value="<%= p.participant_name %>">
+              <button type="submit" class="btn btn-ghost small">Rename</button>
+            </form>
+            <form action="/manage/<%= token %>" method="POST" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="participantId" value="<%= p.participant_id %>">
+              <button type="button" class="btn btn-link danger small manage-delete-btn" data-participant-id="<%= p.participant_id %>" data-participant-name="<%= p.participant_name %>">Delete</button>
+            </form>
+          </div>
+        <% }) %>
+        <form action="/manage/<%= token %>" method="POST" class="inline-form participant-add">
+          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+          <input type="hidden" name="action" value="add">
+          <label class="sr-only" for="add-participant-name">Add participant</label>
+          <input id="add-participant-name" type="text" name="name" placeholder="New participant name">
+          <button type="submit" class="btn btn-outline small">Add</button>
+        </form>
+      </div>
+      <% if ((participants || []).length > 1) { %>
+      <div class="participant-merge">
+        <form action="/manage/<%= token %>" method="POST" class="inline-form merge-form">
+          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+          <input type="hidden" name="action" value="merge">
+          <label class="form-label">Merge participants</label>
+          <div class="merge-row">
+            <select name="fromId" required>
+              <% (participants || []).forEach(function(p){ %>
+                <option value="<%= p.participant_id %>"><%= p.participant_name %></option>
+              <% }) %>
+            </select>
+            <span class="muted small">into</span>
+            <select name="toId" required>
+              <% (participants || []).forEach(function(p){ %>
+                <option value="<%= p.participant_id %>"><%= p.participant_name %></option>
+              <% }) %>
+            </select>
+            <button type="submit" class="btn btn-ghost small">Merge</button>
+          </div>
+          <p class="muted tiny">This moves all assignments from the first person into the second, then removes the first.</p>
+        </form>
+      </div>
+      <% } %>
+    </div>
+    <div id="manage-data" data-assignments='<%- assignmentsJson %>' data-participants='<%- JSON.stringify(participants || []) %>' hidden></div>
+  </article>
+</section>
 
 <% if (hasTimeBlocks) { %>
 <section class="page-section page-shell">
@@ -63,7 +130,7 @@
   <% } %>
 
   <div id="slots-by-station" class="slot-view slot-view--station">
-    <h3 class="step-heading"><%= isPotluck ? 'Step 1: Review items' : 'Step 1: Review opportunities' %></h3>
+    <h3 class="step-heading"><%= isPotluck ? 'Step 2: Review items' : 'Step 2: Review opportunities' %></h3>
     <div class="station-grid">
       <% stations.forEach(station => { %>
         <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
@@ -96,7 +163,7 @@
             <ul class="time-block-list">
               <% blocks.forEach(block => { %>
                 <% const isSelected = Array.isArray(selectedBlockIds) && selectedBlockIds.includes(block.block_id); %>
-                <% var existingNote = ''; if (Array.isArray(reservations)) { for (var i=0;i<reservations.length;i++){ if (reservations[i].block_id === block.block_id) { existingNote = reservations[i].note || ''; break; } } } %>
+                <% var existingNote = potluckNotes[block.block_id] || ''; %>
                 <li
                   class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
                   data-block-id="<%= block.block_id %>"
@@ -130,9 +197,9 @@
                     <% } %>
                     <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
                     <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
-                    <div class="time-block-item__hint">
+                    <div class="time-block-item__hint" data-role="assign-hint">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
-                      Click "Select" to <%= isPotluck ? 'update this item' : 'update this time block' %>.
+                      <span class="assign-hint-text">Pick a participant, then click “Assign” to <%= isPotluck ? 'update this item' : 'update this time block' %>.</span>
                     </div>
                   </div>
                   <% if (isPotluck) { %>
@@ -184,18 +251,23 @@
 
 <section class="page-section page-shell">
   <% if (isPotluck) { %>
-    <h3 id="step2Heading" class="step-heading">Step 2: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+    <h3 id="step2Heading" class="step-heading">Step 3: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
     <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:block;">
       <div id="selected-slots-container"></div>
     </div>
     <h3 id="step3Heading" class="step-heading">Step 3: Save your changes</h3>
   <% } else { %>
-    <h3 id="step2Heading" class="step-heading">Step 2: Save your changes <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+    <h3 id="step2Heading" class="step-heading">Step 3: Save your changes <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
   <% } %>
   <div id="signup-form" class="card card--plain signup-panel" style="display:block;">
     <p class="muted">Select or deselect any selections above, then save. You can also remove all selections to cancel your signup.</p>
-    <form id="signupFormTag" action="/manage/<%= token %>" method="POST" novalidate data-mode="manage" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
+    <div id="save-review" class="save-review muted" aria-live="polite">
+      <p class="muted">Your selections will appear here so you can review before saving.</p>
+    </div>
+    <form id="signupFormTag" action="/manage/<%= token %><%= debugCapacity ? '?debug=capacity' : '' %>" method="POST" novalidate data-mode="manage" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
       <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+      <input type="hidden" name="registration_payload" id="registration-payload">
+      <div id="signup-client-errors" class="notice notice--error" style="display:none;"></div>
       <div class="card-actions">
         <button type="submit" class="btn btn-primary">Save changes</button>
       </div>
@@ -204,43 +276,50 @@
 </section>
 
 <section class="page-section page-shell email-pref-section" id="email-preferences">
-  <h3 class="step-heading">Email preferences</h3>
-  <article class="card card--plain email-pref-card">
-    <div class="email-pref-status">
-      <% if (emailPrefs.optIn) { %>
-        <span class="status-pill status-pill--on">Subscribed</span>
-        <p class="muted">We send confirmations and reminders to <strong><%= emailPrefs.volunteerEmail || 'your email address' %></strong>.</p>
-      <% } else { %>
-        <span class="status-pill status-pill--off">Unsubscribed</span>
-        <p class="muted">
-          You are not receiving automated volunteer emails<% if (emailPrefs.volunteerEmail) { %> at <strong><%= emailPrefs.volunteerEmail %></strong><% } %>.
-          <% if (emailPrefs.optedOutAt) { %>Last updated on <%= fmt12(emailPrefs.optedOutAt) %>.<% } %>
-        </p>
-      <% } %>
+  <details class="email-pref-accordion" aria-label="Email preferences">
+    <summary class="email-pref-summary">
+      <span>Email preferences</span>
+      <span class="muted small">(optional)</span>
+    </summary>
+    <div class="email-pref-body">
+      <article class="card card--plain email-pref-card">
+        <div class="email-pref-status">
+          <% if (emailPrefs.optIn) { %>
+            <span class="status-pill status-pill--on">Subscribed</span>
+            <p class="muted">We send confirmations and reminders to <strong><%= emailPrefs.volunteerEmail || 'your email address' %></strong>.</p>
+          <% } else { %>
+            <span class="status-pill status-pill--off">Unsubscribed</span>
+            <p class="muted">
+              You are not receiving automated volunteer emails<% if (emailPrefs.volunteerEmail) { %> at <strong><%= emailPrefs.volunteerEmail %></strong><% } %>.
+              <% if (emailPrefs.optedOutAt) { %>Last updated on <%= fmt12(emailPrefs.optedOutAt) %>.<% } %>
+            </p>
+          <% } %>
+        </div>
+        <p class="muted small">These messages include schedule confirmations and reminders required for event coordination. You can unsubscribe at any time.</p>
+        <% if (emailPrefs.optIn) { %>
+          <form action="/manage/<%= token %>/preferences" method="POST" class="email-pref-form">
+            <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+            <input type="hidden" name="preference" value="opt-out">
+            <label class="form-label" for="pref-reason">Optional feedback</label>
+            <textarea id="pref-reason" name="reason" rows="3" placeholder="Let us know why you no longer wish to receive volunteer emails (optional)"></textarea>
+            <p class="muted small">Stopping emails means you won’t receive automatic confirmations for future changes.</p>
+            <div class="card-actions">
+              <button type="submit" class="btn btn-danger">Stop volunteer emails</button>
+            </div>
+          </form>
+        <% } else { %>
+          <form action="/manage/<%= token %>/preferences" method="POST" class="email-pref-form">
+            <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+            <input type="hidden" name="preference" value="opt-in">
+            <p class="muted small">Turn confirmations back on so we can notify you whenever your schedule changes.</p>
+            <div class="card-actions">
+              <button type="submit" class="btn btn-primary">Resume volunteer emails</button>
+            </div>
+          </form>
+        <% } %>
+      </article>
     </div>
-    <p class="muted small">These messages include schedule confirmations and reminders required for event coordination. You can unsubscribe at any time.</p>
-    <% if (emailPrefs.optIn) { %>
-      <form action="/manage/<%= token %>/preferences" method="POST" class="email-pref-form">
-        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-        <input type="hidden" name="preference" value="opt-out">
-        <label class="form-label" for="pref-reason">Optional feedback</label>
-        <textarea id="pref-reason" name="reason" rows="3" placeholder="Let us know why you no longer wish to receive volunteer emails (optional)"></textarea>
-        <p class="muted small">Stopping emails means you won’t receive automatic confirmations for future changes.</p>
-        <div class="card-actions">
-          <button type="submit" class="btn btn-danger">Stop volunteer emails</button>
-        </div>
-      </form>
-    <% } else { %>
-      <form action="/manage/<%= token %>/preferences" method="POST" class="email-pref-form">
-        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-        <input type="hidden" name="preference" value="opt-in">
-        <p class="muted small">Turn confirmations back on so we can notify you whenever your schedule changes.</p>
-        <div class="card-actions">
-          <button type="submit" class="btn btn-primary">Resume volunteer emails</button>
-        </div>
-      </form>
-    <% } %>
-  </article>
+  </details>
 </section>
 
 <div id="selection-fab" class="selection-fab" hidden>
@@ -249,6 +328,6 @@
 
 <!-- Toast root + data hook for client-side snackbar (must be inside <body>) -->
 <div id="toast-root" aria-live="polite" aria-atomic="true" style="position:fixed; inset: auto 0 max(16px, env(safe-area-inset-bottom)) 0; display:flex; justify-content:center; pointer-events:none; z-index:2000;"></div>
-<div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>"></div>
+<div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>" data-debug="<%= (messages && messages.debug && messages.debug[0]) ? messages.debug[0] : '' %>"></div>
 
 <%- include('../partials/footer') %>

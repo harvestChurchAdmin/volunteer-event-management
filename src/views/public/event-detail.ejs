@@ -100,10 +100,61 @@
 <%
   const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
   const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0);
+  const draftReg = locals.draftRegistration || {};
+  const draftRegistrant = draftReg.registrant || draftReg;
+  const draftParticipants = Array.isArray(draftReg.participants) ? draftReg.participants : [];
+  const partySizeDefault = Number(draftReg.party_size || draftReg.partySize || draftParticipants.length || 1);
+  const registrantParticipating = (draftReg.registrant_participating || draftReg.participating || 'yes') !== 'no';
 %>
 
+<section class="page-section page-section--compact page-shell">
+  <h3 class="step-heading">Step 1: Registrant &amp; participants</h3>
+  <article class="card card--plain signup-panel">
+    <div id="step1-errors" class="notice notice--error" style="display:none;"></div>
+    <div class="form-grid two">
+      <div class="form-group">
+        <label for="signup-name">Your name</label>
+        <input form="signupFormTag" type="text" id="signup-name" name="name" placeholder="Full Name" value="<%= draftRegistrant && draftRegistrant.name ? draftRegistrant.name : '' %>" required>
+      </div>
+      <div class="form-group">
+        <label for="signup-email">Email</label>
+        <input form="signupFormTag" type="email" id="signup-email" name="email" placeholder="you@example.com" value="<%= draftRegistrant && draftRegistrant.email ? draftRegistrant.email : '' %>" required>
+      </div>
+      <div class="form-group full">
+        <label for="signup-phone">Phone (optional)</label>
+        <input form="signupFormTag" type="tel" id="signup-phone" name="phone" placeholder="(555) 555-1234" value="<%= draftRegistrant && draftRegistrant.phone ? draftRegistrant.phone : '' %>">
+      </div>
+    </div>
+    <div class="form-grid two">
+      <div class="form-group">
+        <label>Are you also participating?</label>
+        <div class="radio-group">
+          <label><input form="signupFormTag" type="radio" name="registrant_participating" value="yes" <%= registrantParticipating ? 'checked' : '' %>> Yes</label>
+          <label><input form="signupFormTag" type="radio" name="registrant_participating" value="no" <%= registrantParticipating ? '' : 'checked' %>> No</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="party-size">How many people are you signing up?</label>
+        <input form="signupFormTag" type="number" min="1" id="party-size" name="party_size" value="<%= partySizeDefault || 1 %>">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Participant names</label>
+      <p class="muted small">Add everyone in your party. If you are participating, keep yourself on the list.</p>
+      <div id="participant-list"
+        data-participants='<%- JSON.stringify(draftParticipants) %>'
+        data-registrant-name="<%= draftRegistrant && draftRegistrant.name ? draftRegistrant.name.replace(/\"/g, '&quot;') : '' %>"
+        data-registrant-participating="<%= registrantParticipating ? 'yes' : 'no' %>">
+      </div>
+    </div>
+    <div class="card-actions">
+      <button type="button" class="btn btn-primary" id="step1-continue">Continue to Step 2</button>
+    </div>
+  </article>
+</section>
+
 <% if (hasTimeBlocks) { %>
-  <section class="page-section page-section--compact page-shell <%= debugLayout ? 'debug-layout' : '' %>" data-debug="<%= debugLayout ? 'page-shell' : '' %>">
+  <section id="selection-step" class="page-section page-section--compact page-shell <%= debugLayout ? 'debug-layout' : '' %>" data-debug="<%= debugLayout ? 'page-shell' : '' %>" style="display:none;">
     <% if (!isPotluck) { %>
       <div class="slot-toolbar">
         <div class="slot-toolbar__group">
@@ -121,7 +172,7 @@
     <% } %>
 
     <div id="slots-by-station" class="slot-view slot-view--station">
-      <h3 class="step-heading"><%= isPotluck ? 'Step 1: Select items' : 'Step 1: Select opportunities' %></h3>
+      <h3 class="step-heading"><%= isPotluck ? 'Step 2: Select items' : 'Step 2: Select opportunities' %></h3>
       <div class="station-grid">
         <% stations.forEach(station => { %>
           <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
@@ -160,6 +211,8 @@
                   data-block-id="<%= block.block_id %>"
                   data-station-id="<%= station.station_id %>"
                   data-station-name="<%= station.name %>"
+                  data-capacity="<%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %>"
+                  data-reserved="<%= block.reserved_count || 0 %>"
                   data-start-time="<%= isPotluck ? '' : block.start_time %>"
                   data-end-time="<%= isPotluck ? '' : block.end_time %>"
                   <% if (isPotluck) { %>data-item-title="<%= (block.title || '').replace(/\"/g, '&quot;') %>"<% } %>
@@ -190,9 +243,9 @@
                       <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
                       <% /* Food prep "Others signed up" is rendered in the dedicated right column below. */ %>
                       <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
-                      <div class="time-block-item__hint">
+                      <div class="time-block-item__hint" data-role="assign-hint">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
-                        Click “Select” to add this <%= isPotluck ? 'item' : 'time block' %>.
+                        <span class="assign-hint-text">Pick a participant, then click “Assign” to add this <%= isPotluck ? 'item' : 'time block' %>.</span>
                       </div>
                     </div>
                     <% if (isPotluck) { %>
@@ -230,41 +283,29 @@
     </div>
   </section>
 
-  <section class="page-section page-shell">
+  <section id="review-step" class="page-section page-shell" style="display:none;">
     <% if (isPotluck) { %>
-      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 2: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 3: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
       <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:none;">
         <div id="selected-slots-container"></div>
       </div>
-      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 3: Enter contact info</h3>
+      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 4: Review &amp; submit</h3>
     <% } else { %>
-      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 2: Review selections <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
+      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 3: Review selections <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
       <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:none;">
         <div id="selected-slots-container"></div>
       </div>
-      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 3: Enter contact info</h3>
+      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 4: Review &amp; submit</h3>
     <% } %>
     <div id="signup-form" class="card card--plain signup-panel" style="display:none;">
-      <p class="muted">Share your contact info so the team can confirm your selection.</p>
+      <p class="muted">Review your selections and submit your group registration.</p>
       <form id="signupFormTag" action="/signup" method="POST" novalidate data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
         <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
         <input type="hidden" name="eventId" value="<%= event.event_id %>">
-        <div class="form-grid two">
-          <div class="form-group">
-            <label for="signup-name">Full name</label>
-            <input type="text" id="signup-name" name="name" placeholder="Full Name" value="<%= formDefaults && formDefaults.name ? formDefaults.name : '' %>" required>
-          </div>
-          <div class="form-group">
-            <label for="signup-email">Email</label>
-            <input type="email" id="signup-email" name="email" placeholder="you@example.com" value="<%= formDefaults && formDefaults.email ? formDefaults.email : '' %>" required>
-          </div>
-          <div class="form-group full">
-            <label for="signup-phone">Phone</label>
-            <input type="tel" id="signup-phone" name="phone" placeholder="(555) 555-1234" value="<%= formDefaults && formDefaults.phone ? formDefaults.phone : '' %>" required>
-          </div>
-        </div>
+        <input type="hidden" name="registration_payload" id="registration-payload" value="<%= helpers.escapeHtml(JSON.stringify(draftReg || {})) %>">
+        <div id="signup-client-errors" class="notice notice--error" style="display:none;"></div>
         <div class="card-actions">
-          <button type="submit" class="btn btn-primary">Confirm selections</button>
+          <button type="submit" class="btn btn-primary">Confirm registration</button>
         </div>
       </form>
     </div>

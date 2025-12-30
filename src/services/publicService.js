@@ -1,4 +1,10 @@
 // src/services/publicService.js
+// ---------------------------------------------------------------------------
+// Handles public/group registration flows and manage-link operations.
+// Responsibilities:
+// - Shape event data for the public pages (schedule vs. potluck modes)
+// - Validate incoming signups, enforce non-overlapping slots, and create manage links
+// - Send confirmation/reminder emails and respect opt-out preferences
 const crypto = require('crypto');
 const createError = require('http-errors');
 const dal = require('../db/dal');
@@ -6,29 +12,9 @@ const { fmt12 } = require('../views/helpers');
 const { sendMail } = require('../utils/mailer');
 const { getBranding } = require('../config/branding');
 
-/**
- * Base external URL used when issuing management links in transactional email.
- * Falls back to localhost in development so the links are still clickable when
- * running the server locally.
- */
 const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
-
-// Default lifetime (in days) for volunteer management tokens. Can be overridden
-// per environment via MANAGE_TOKEN_TTL_DAYS.
 const TOKEN_TTL_DAYS = Number(process.env.MANAGE_TOKEN_TTL_DAYS || 30);
 
-/**
- * Returns all published events that still have an upcoming end date. This feeds
- * the public-facing event list view.
- */
-function getPublicEvents() {
-  return dal.public.listUpcomingEvents();
-}
-
-/**
- * Converts the flattened SQL result set (event joined to stations & time blocks)
- * into a nested structure that templates and controllers can work with.
- */
 function mapEventRows(rows) {
   if (!rows || rows.length === 0 || !rows[0].event_id) return null;
 
@@ -68,7 +54,6 @@ function mapEventRows(rows) {
         const last = parts.length > 1 ? parts[parts.length - 1].charAt(0).toUpperCase() + '.' : '';
         return last ? `${first} ${last}` : first;
       }
-      // Prefer paired (note::name) when available; fall back to notes only
       const notes = notesWithNamesRaw.length
         ? notesWithNamesRaw.map(pair => {
             const idx = pair.indexOf('::');
@@ -97,26 +82,8 @@ function mapEventRows(rows) {
   return event;
 }
 
-function normalizeDishNote(value) {
-  const s = String(value || '').trim();
-  // Guard against accidental leading commas (e.g., ", Lasagna")
-  return s.replace(/^\s*,\s*/, '');
-}
-
-function getEventDetailsForPublic(eventId) {
-  const rows = dal.public.getEventForPublic(eventId);
-  const event = mapEventRows(rows);
-  return enrichPotluckDishNotes(event, eventId);
-}
-
-/**
- * Admin-only preview: load event details even when not published.
- * Uses admin DAL join and maps to the public structure so the same template renders.
- */
-function getEventDetailsForPreview(eventId) {
-  const rows = dal.admin.getEventById(eventId);
-  const event = mapEventRows(rows);
-  return event;
+function getPublicEvents() {
+  return dal.public.listUpcomingEvents();
 }
 
 function enrichPotluckDishNotes(event, eventId) {
@@ -147,7 +114,17 @@ function enrichPotluckDishNotes(event, eventId) {
   return event;
 }
 
-// Helpers -------------------------------------------------------------------
+function getEventDetailsForPublic(eventId) {
+  const rows = dal.public.getEventForPublic(eventId);
+  const event = mapEventRows(rows);
+  return enrichPotluckDishNotes(event, eventId);
+}
+
+function getEventDetailsForPreview(eventId) {
+  const rows = dal.admin.getEventById(eventId);
+  const event = mapEventRows(rows);
+  return event;
+}
 
 function parseLocalDate(value) {
   if (!value) return null;
@@ -156,19 +133,12 @@ function parseLocalDate(value) {
   return Number.isNaN(maybe.getTime()) ? null : maybe;
 }
 
-function formatReservationRow(row) {
-  const start = parseLocalDate(row.start_time);
-  const end = parseLocalDate(row.end_time);
-  const startStr = start ? fmt12(start.toISOString()) : row.start_time;
-  const endStr = end ? fmt12(end.toISOString()) : row.end_time;
-  return {
-    station: row.station_name,
-    // If this is a potluck item (title present), use it as the primary line
-    start: row.title ? row.title : startStr,
-    end: row.title ? '' : endStr,
-    note: row.note || '',
-    block_id: row.block_id
-  };
+function fmtRange(start, end) {
+  const s = parseLocalDate(start);
+  const e = parseLocalDate(end);
+  if (!s && !e) return '';
+  if (s && e) return `${fmt12(s.toISOString())} – ${fmt12(e.toISOString())}`;
+  return s ? fmt12(s.toISOString()) : fmt12(e.toISOString());
 }
 
 function buildManageUrl(token) {
@@ -181,16 +151,147 @@ function computeExpiryDate(days = TOKEN_TTL_DAYS) {
   return dt.toISOString();
 }
 
-/**
- * Ensures the volunteer has a valid management token for the given event,
- * reusing an existing token when possible to avoid generating multiple emails
- * with different URLs.
- */
-function issueManageToken(volunteerId, eventId) {
+function issueManageToken(registrationId) {
   const token = crypto.randomBytes(24).toString('hex');
   const expiresAt = computeExpiryDate();
-  dal.public.storeVolunteerToken(token, volunteerId, eventId, expiresAt);
+  dal.public.storeRegistrationToken(token, registrationId, expiresAt);
   return token;
+}
+
+/**
+ * Merge duplicate registrations for the same event/email into a single
+ * registration so the person has one manage link. Returns the surviving
+ * registration (or null if none).
+ */
+function mergeRegistrationsForEmail(eventId, email, primaryIdHint) {
+  if (!email) return null;
+  // Remove any empty shells before merging
+  try { dal.public.deleteEmptyRegistrations(eventId, email); } catch (_) {}
+  const regs = dal.public.findRegistrationsByEmail(eventId, email) || [];
+  if (!regs.length) return null;
+  const primary = (primaryIdHint && regs.find(r => r.registration_id === primaryIdHint)) || regs[0];
+  const extras = regs.filter(r => r.registration_id !== primary.registration_id);
+  if (!extras.length) return primary;
+
+  const primaryDetail = dal.public.getRegistrationDetailWithAssignments(primary.registration_id);
+  const nameToParticipant = new Map();
+  (primaryDetail.participants || []).forEach(p => {
+    nameToParticipant.set(String(p.participant_name).trim().toLowerCase(), p.participant_id);
+  });
+
+  const schedAssignments = (primaryDetail.scheduleAssignments || []).map(a => ({
+    participantId: a.participant_id,
+    blockId: Number(a.time_block_id)
+  }));
+  const potAssignments = (primaryDetail.potluckAssignments || []).map(a => ({
+    participantId: a.participant_id,
+    itemId: Number(a.item_id),
+    dishName: a.dish_name
+  }));
+
+  extras.forEach(reg => {
+    const detail = dal.public.getRegistrationDetailWithAssignments(reg.registration_id);
+    const participantIdMap = new Map();
+    (detail.participants || []).forEach(p => {
+      const key = String(p.participant_name).trim().toLowerCase();
+      let targetId = nameToParticipant.get(key);
+      if (!targetId) {
+        const addRes = dal.public.addParticipant(primary.registration_id, p.participant_name);
+        targetId = addRes && addRes.participant_id;
+        nameToParticipant.set(key, targetId);
+      }
+      participantIdMap.set(p.participant_id, targetId);
+    });
+
+    (detail.scheduleAssignments || []).forEach(a => {
+      const targetPid = participantIdMap.get(a.participant_id);
+      if (targetPid) {
+        const exists = schedAssignments.some(sa => sa.participantId === targetPid && Number(sa.blockId) === Number(a.time_block_id));
+        if (!exists) schedAssignments.push({ participantId: targetPid, blockId: Number(a.time_block_id) });
+      }
+    });
+    (detail.potluckAssignments || []).forEach(a => {
+      const targetPid = participantIdMap.get(a.participant_id);
+      if (targetPid) {
+        const exists = potAssignments.some(pa => pa.participantId === targetPid && Number(pa.itemId) === Number(a.item_id));
+        if (!exists) potAssignments.push({ participantId: targetPid, itemId: Number(a.item_id), dishName: a.dish_name });
+      }
+    });
+  });
+
+  // Count extras so capacity checks know these rows will be removed
+  const ignoreSched = [];
+  const ignorePot = [];
+  extras.forEach(reg => {
+    const detail = dal.public.getRegistrationDetailWithAssignments(reg.registration_id);
+    (detail.scheduleAssignments || []).forEach(a => ignoreSched.push(Number(a.time_block_id)));
+    (detail.potluckAssignments || []).forEach(a => ignorePot.push(Number(a.item_id)));
+  });
+
+  dal.public.replaceRegistrationAssignments(
+    primary.registration_id,
+    eventId,
+    schedAssignments,
+    potAssignments,
+    { ignoreSchedCounts: ignoreSched, ignorePotCounts: ignorePot }
+  );
+  // Remove extras after successful merge so capacity math was accurate but data is consolidated.
+  extras.forEach(reg => {
+    try { dal.public.deleteRegistrationCascade(reg.registration_id); } catch (_) {}
+  });
+  try { dal.public.deleteEmptyRegistrations(eventId, email); } catch (_) {}
+  return primary;
+}
+
+async function checkDuplicateRegistration(eventId, email) {
+  const eventIdNum = Number(eventId);
+  const normalizedEmail = String(email || '').trim();
+  if (!eventIdNum || !normalizedEmail) {
+    return { ok: false, duplicate: false };
+  }
+  try { mergeRegistrationsForEmail(eventIdNum, normalizedEmail); } catch (_) {}
+  try { dal.public.deleteEmptyRegistrations(eventIdNum, normalizedEmail); } catch (_) {}
+  const existing = dal.public.findRegistrationsByEmail(eventIdNum, normalizedEmail) || [];
+  if (!existing.length) {
+    return { ok: true, duplicate: false };
+  }
+  const reminder = await sendManageReminder(normalizedEmail, eventIdNum);
+  return {
+    ok: true,
+    duplicate: true,
+    manageUrls: reminder && reminder.manageUrls ? reminder.manageUrls : undefined
+  };
+}
+
+/**
+ * Maintenance helper: merge all duplicate registrations for an event so each
+ * email has at most one registration (and delete empties).
+ */
+function mergeAllDuplicatesForEvent(eventId) {
+  const eventIdNum = Number(eventId);
+  if (!Number.isFinite(eventIdNum)) return { merged: 0, conflicts: [] };
+  const regs = dal.public.listRegistrationsForEvent
+    ? dal.public.listRegistrationsForEvent(eventIdNum)
+    : [];
+  const seen = new Map();
+  regs.forEach(r => {
+    const key = (r.registrant_email || '').trim().toLowerCase();
+    if (!key) return;
+    if (!seen.has(key)) seen.set(key, []);
+    seen.get(key).push(r);
+  });
+  let mergedCount = 0;
+  const conflicts = [];
+  for (const [email] of seen) {
+    try {
+      const primary = mergeRegistrationsForEmail(eventIdNum, email);
+      if (primary) mergedCount += 1;
+    } catch (err) {
+      conflicts.push({ email, error: err && err.message ? err.message : String(err) });
+    }
+  }
+  try { dal.public.deleteEmptyRegistrations(eventIdNum, null); } catch (_) {}
+  return { merged: mergedCount, conflicts };
 }
 
 function resolveSupportContact() {
@@ -260,7 +361,7 @@ function buildComplianceFooter({ orgName, supportEmail, supportPhone, mailingAdd
     const telValue = supportPhone.replace(/[^0-9+]/g, '');
     contactHtmlParts.push(`Phone: <a href="tel:${telValue}" style="color:${linkColor};">${escapeHtml(supportPhone)}</a>`);
   }
-  htmlSections.push(`<p style="margin:0; color:#475569; font-size:13px;">${contactHtmlParts.join(' &nbsp;&bull;&nbsp; ')}</p>`);
+  htmlSections.push(`<p style="margin:0 0 12px; color:#475569; font-size:13px;">${contactHtmlParts.join(' &nbsp;&bull;&nbsp; ')}</p>`);
   if (addressLines.length) {
     htmlSections.push(`<p style="margin:8px 0 0; color:#94a3b8; font-size:12px;">Mailing address:<br>${addressLines.map(escapeHtml).join('<br />')}</p>`);
   }
@@ -283,30 +384,55 @@ function buildComplianceFooter({ orgName, supportEmail, supportPhone, mailingAdd
   };
 }
 
-/**
- * Sends the transactional email letting volunteers know which opportunities they have
- * reserved. The same template is reused for new sign-ups and updates.
- */
-async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl, isUpdate }) {
-  if (!volunteer.email) return;
-  if (typeof volunteer.email_opt_in !== 'undefined' && Number(volunteer.email_opt_in) === 0) {
-    console.info('[PublicService] Skipping confirmation email to %s (volunteer opted out).', volunteer.email);
+function groupAssignments(detail) {
+  const participants = (detail.participants || []).map(p => ({
+    participant_id: p.participant_id,
+    participant_name: p.participant_name,
+    schedule: [],
+    potluck: []
+  }));
+  const byId = new Map(participants.map(p => [p.participant_id, p]));
+  (detail.scheduleAssignments || []).forEach(assign => {
+    const target = byId.get(assign.participant_id);
+    if (target) target.schedule.push(assign);
+  });
+  (detail.potluckAssignments || []).forEach(assign => {
+    const target = byId.get(assign.participant_id);
+    if (target) target.potluck.push(assign);
+  });
+  return participants;
+}
+
+async function sendConfirmationEmail({ registration, event, participants, manageUrl, isUpdate }) {
+  if (!registration || !registration.registrant_email) return;
+  if (typeof registration.email_opt_in !== 'undefined' && Number(registration.email_opt_in) === 0) {
+    console.info('[PublicService] Skipping confirmation email to %s (registrant opted out).', registration.registrant_email);
     return;
   }
 
   const { supportName, supportEmail, supportPhone, supportContactHtml, orgName, orgMailingAddress } = resolveSupportContact();
-
   const isPotluckEmail = String(event && event.signup_mode || '').toLowerCase() === 'potluck';
   const subject = isPotluckEmail
     ? (isUpdate ? `Updated food prep signup for ${event.name}` : `Your food prep signup for ${event.name}`)
     : (isUpdate ? `Updated volunteer schedule for ${event.name}` : `Your volunteer schedule for ${event.name}`);
 
-  const listItems = reservations.length
-    ? reservations.map(slot => {
-        const core = `${slot.station}: ${slot.start}${slot.end ? ' – ' + slot.end : ''}`;
-        const dish = slot.note && slot.note.trim() ? ` (Dish: ${slot.note.trim()})` : '';
-        return `• ${core}${dish}`;
-      }).join('\n')
+  const listItems = participants.length
+    ? participants.map(p => {
+        const lines = [];
+        if (p.schedule && p.schedule.length) {
+          p.schedule.forEach(slot => {
+            const timeStr = fmtRange(slot.start_time, slot.end_time);
+            lines.push(`• ${p.participant_name}: ${slot.station_name}${timeStr ? ' — ' + timeStr : ''}`);
+          });
+        }
+        if (p.potluck && p.potluck.length) {
+          p.potluck.forEach(slot => {
+            const dish = slot.dish_name ? ` (Dish: ${slot.dish_name})` : '';
+            lines.push(`• ${p.participant_name}: ${slot.station_name} — ${slot.title || 'Item'}${dish}`);
+          });
+        }
+        return lines.join('\n');
+      }).filter(Boolean).join('\n')
     : 'You currently have no reserved opportunities.';
 
   const complianceFooter = buildComplianceFooter({
@@ -318,17 +444,17 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
   });
 
   const textLines = (function(){
-    const lines = [`Hi ${volunteer.name || volunteer.email},`, ''];
+    const lines = [`Hi ${registration.registrant_name || registration.registrant_email},`, ''];
     if (isPotluckEmail) {
-      lines.push(`Thank you for contributing to the food prep for ${event.name}! We're excited to see what you're preparing.`);
+      lines.push(`Thank you for contributing to the food prep for ${event.name}!`);
       lines.push('');
-      lines.push('Here are the items you\'ve signed up to prepare:');
+      lines.push('Here is your group summary:');
     } else {
-      lines.push(`Thank you so much for serving with us at ${event.name}! We are grateful for your time and heart to help our community.`);
+      lines.push(`Thank you for serving with us at ${event.name}!`);
       lines.push('');
-      lines.push('Here is your schedule:');
+      lines.push('Here is your group schedule:');
     }
-    lines.push(listItems, '', `Need to make a change? Manage your signup here: ${manageUrl}`, '',
+    lines.push(listItems || 'No assignments yet.', '', `Manage your signup here: ${manageUrl}`, '',
       'If you have any questions or run into trouble, reach out to us:');
     const contactLines = [];
     if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
@@ -346,92 +472,61 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
   })();
 
   const text = textLines.join('\n');
-
-  const htmlList = reservations.length
+  const groupedHtml = participants.length
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0 24px;">
-          ${reservations.map((slot, index) => `
-            <tr>
-              <td align="left" valign="top" style="padding:0 0 12px 0;">
-                <!--[if mso]>
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                      <td bgcolor="#f0f4ff" style="padding:12px 16px;">
-                <![endif]-->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
-                  <tr>
-                    <td bgcolor="#f0f4ff" style="background-color:#f0f4ff; border-radius:12px; padding:12px 16px; font-family:'Segoe UI', Arial, sans-serif;">
-                      <p style="margin:0 0 4px; font-weight:600; color:#1d4ed8; font-size:15px;">${slot.station}</p>
-                      <p style="margin:0; color:#475569; font-size:14px;">${slot.start}${slot.end ? ' – ' + slot.end : ''}${slot.note ? ' • Dish: ' + slot.note : ''}</p>
-                    </td>
-                  </tr>
-                </table>
-                <!--[if mso]>
-                      </td>
-                    </tr>
-                  </table>
-                <![endif]-->
-              </td>
-            </tr>
-            ${index < reservations.length - 1 ? '<tr><td height="4" style="font-size:0; line-height:0;">&nbsp;</td></tr>' : ''}
-          `).join('')}
-        </table>`
+        ${participants.map((p, idx) => `
+          <tr>
+            <td style="padding:0 0 12px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
+                <tr>
+                  <td bgcolor="#f0f4ff" style="background-color:#f0f4ff; border-radius:12px; padding:12px 16px; font-family:'Segoe UI', Arial, sans-serif;">
+                    <p style="margin:0 0 6px; font-weight:700; color:#1d4ed8; font-size:15px;">${escapeHtml(p.participant_name)}</p>
+                    ${(p.schedule || []).map(slot => `<p style="margin:0 0 6px; color:#475569; font-size:14px;">${escapeHtml(slot.station_name)} — ${escapeHtml(fmtRange(slot.start_time, slot.end_time))}</p>`).join('')}
+                    ${(p.potluck || []).map(slot => `<p style="margin:0 0 6px; color:#475569; font-size:14px;">${escapeHtml(slot.station_name)} — ${escapeHtml(slot.title || 'Item')}${slot.dish_name ? ' • Dish: ' + escapeHtml(slot.dish_name) : ''}</p>`).join('')}
+                    ${(!p.schedule.length && !p.potluck.length) ? '<p style="margin:0; color:#94a3b8;">No assignments yet.</p>' : ''}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ${idx < participants.length - 1 ? '<tr><td height="6" style="font-size:0; line-height:0;">&nbsp;</td></tr>' : ''}
+        `).join('')}
+      </table>`
     : '<p style="margin:16px 0 24px; color:#475569; font-family:\'Segoe UI\', Arial, sans-serif;">You currently have no reserved opportunities.</p>';
 
   const html = `<!DOCTYPE html>
-    <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+    <html lang="en">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <title>Volunteer Schedule</title>
         <style>
-          table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
           a { text-decoration:none; }
         </style>
-        <!--[if mso]>
-        <style type="text/css">
-          body, table, td { font-family: 'Segoe UI', Arial, sans-serif !important; }
-        </style>
-        <![endif]-->
       </head>
       <body style="margin:0; padding:0; background-color:#dfe4f3;">
         <div role="article" aria-roledescription="email" lang="en" style="background-color:#dfe4f3;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#dfe4f3; margin:0;">
             <tr>
               <td align="center" style="padding:32px 16px;">
-                <!--[if mso]>
-                  <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                      <td>
-                <![endif]-->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px; background-color:#ffffff; border-radius:18px; box-shadow:0 20px 38px rgba(15,23,42,0.12); overflow:hidden;" bgcolor="#ffffff">
                   <tr>
                     <td bgcolor="#2563eb" style="background-color:#2563eb; padding:28px 32px; color:#ffffff; font-family:'Segoe UI', Arial, sans-serif;">
                       <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em;">${isPotluckEmail ? 'Thanks for contributing!' : 'Thank you for serving!'}</h1>
-                      <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">${isPotluckEmail ? `We\'re excited for your contribution to <strong>${event.name}</strong>.` : `We're grateful to have you on the team for <strong>${event.name}</strong>.`}</p>
+                      <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">${isPotluckEmail ? `We&rsquo;re excited for your contribution to <strong>${escapeHtml(event.name)}</strong>.` : `We&rsquo;re grateful to have you on the team for <strong>${escapeHtml(event.name)}</strong>.`}</p>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
-                      <p style="margin:0 0 16px; font-size:16px;">Hi ${volunteer.name || volunteer.email},</p>
-                      <p style="margin:0 0 16px; color:#475569; line-height:1.7;">${isPotluckEmail ? 'Below are the food prep items you\'ve signed up for.' : `Thank you for lending your time and heart to serve. Below you'll find your volunteer schedule details.`}</p>
-                      ${htmlList}
+                      <p style="margin:0 0 16px; font-size:16px;">Hi ${escapeHtml(registration.registrant_name || registration.registrant_email)},</p>
+                      <p style="margin:0 0 16px; color:#475569; line-height:1.7;">${isPotluckEmail ? 'Below are the food prep items your group signed up for.' : 'Below you will find your group&rsquo;s volunteer schedule details.'}</p>
+                      ${groupedHtml}
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:32px auto 28px;">
                         <tr>
                           <td align="center" role="presentation">
-                            <!--[if mso]>
-                              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${manageUrl}" style="height:48px; v-text-anchor:middle; width:240px;" arcsize="50%" stroke="f" fillcolor="#2563eb">
-                                <w:anchorlock/>
-                                <center style="color:#ffffff; font-family:'Segoe UI', Arial, sans-serif; font-size:15px; font-weight:600;">
-                                  Manage Your Signup
-                                </center>
-                              </v:roundrect>
-                            <![endif]-->
-                            <!--[if !mso]><!-- -->
-                              <a href="${manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
-                                Manage Your Signup
-                              </a>
-                            <!--<![endif]-->
+                            <a href="${manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
+                              Manage Your Signup
+                            </a>
                           </td>
                         </tr>
                       </table>
@@ -443,7 +538,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
                           </td>
                         </tr>
                       </table>
-                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${supportName || 'Volunteer Team'}</strong></p>
+                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${escapeHtml(supportName || 'Volunteer Team')}</strong></p>
                       ${complianceFooter.htmlBlock || ''}
                     </td>
                   </tr>
@@ -453,11 +548,6 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
                     </td>
                   </tr>
                 </table>
-                <!--[if mso]>
-                      </td>
-                    </tr>
-                  </table>
-                <![endif]-->
               </td>
             </tr>
           </table>
@@ -468,7 +558,7 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
   try {
     const headers = complianceFooter.listUnsubscribe ? { 'List-Unsubscribe': complianceFooter.listUnsubscribe } : undefined;
     await sendMail({
-      to: volunteer.email,
+      to: registration.registrant_email,
       subject,
       text,
       html,
@@ -479,209 +569,478 @@ async function sendConfirmationEmail({ volunteer, event, reservations, manageUrl
   }
 }
 
-/**
- * Handles a public sign-up submission. The heavy lifting (capacity checks,
- * volunteer creation, reservation writes) lives in the DAL, keeping this
- * function focused on validation and follow-up email.
- */
-async function processVolunteerSignup(volunteerData, blockIds, notesMap) {
-  if (!volunteerData || !volunteerData.name || !volunteerData.email || !volunteerData.phone) {
-    throw createError(400, 'Name, email, and phone are required.');
-  }
-  if (!Array.isArray(blockIds) || blockIds.length === 0) {
-    throw createError(400, 'Please select at least one time block.');
-  }
+function normalizeName(value) {
+  return String(value || '').trim();
+}
 
-  const ids = Array.from(new Set(blockIds.map(id => Number(id)).filter(Number.isFinite)));
-  if (ids.length === 0) {
-    throw createError(400, 'No valid time block IDs were submitted.');
-  }
+function normalizeDish(value) {
+  return String(value || '').trim().replace(/^\s*,\s*/, '');
+}
 
-  // Normalize dish notes to map keyed by numeric block_id
-  const normalizedNotes = {};
-  if (Array.isArray(notesMap)) {
-    // Some browsers/servers parse bracketed keys into arrays: align by index with ids
-    notesMap.forEach((val, idx) => {
-      const bid = Number(ids[idx]);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(val);
+function ensureUniqueParticipants(names) {
+  const seen = new Set();
+  names.forEach(n => {
+    const key = n.toLowerCase();
+    if (seen.has(key)) throw createError(400, 'Participant names must be unique within your registration.');
+    seen.add(key);
+  });
+}
+
+function slotsOverlap(a, b) {
+  if (!a || !b) return false;
+  if (!Number.isFinite(a.start) || !Number.isFinite(a.end) || !Number.isFinite(b.start) || !Number.isFinite(b.end)) {
+    return false;
+  }
+  return a.start < b.end && b.start < a.end;
+}
+
+function buildTimeMap(blocks) {
+  const map = new Map();
+  blocks.forEach(b => {
+    const start = parseLocalDate(b.start_time);
+    const end = parseLocalDate(b.end_time);
+    map.set(Number(b.block_id), {
+      start: start ? start.getTime() : Number.NaN,
+      end: end ? end.getTime() : Number.NaN
     });
-  } else if (notesMap && typeof notesMap === 'object') {
-    Object.keys(notesMap).forEach(key => {
-      const bid = Number(key);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(notesMap[key]);
-    });
-  }
+  });
+  return map;
+}
 
-  // Validation: if event is potluck and any selected block is titled "Other",
-  // require a dish name (note)
-  const blocksInfo = dal.public.getBlocksInfo(ids);
-  let eventIdFromBlocks = (blocksInfo && blocksInfo[0] && blocksInfo[0].event_id) || null;
-  const eventBasic = eventIdFromBlocks ? dal.public.getEventBasic(eventIdFromBlocks) : null;
-  const isPotluck = !!(eventBasic && String(eventBasic.signup_mode) === 'potluck');
-  if (isPotluck) {
-    const missing = blocksInfo.filter(b => !String(normalizedNotes[b.block_id] || '').trim().length);
-    if (missing.length) throw createError(400, 'Please enter a dish name for each selected item.');
-  }
+async function processVolunteerSignup(payload) {
+  const eventId = Number(payload.eventId);
+  if (!Number.isFinite(eventId)) throw createError(400, 'Event is required.');
+  const event = dal.public.getEventBasic(eventId);
+  if (!event) throw createError(404, 'Event not found.');
+  const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
 
-  const result = dal.public.reserveVolunteerSlots(
-    { name: volunteerData.name.trim(), email: volunteerData.email.trim(), phone: volunteerData.phone.trim() },
-    ids,
-    normalizedNotes
-  );
-
-  if (!result.eventId) {
-    throw createError(500, 'Unable to determine event for reservation.');
-  }
-
-  const event = dal.public.getEventBasic(result.eventId);
-  if (!event) {
-    throw createError(404, 'Event not found.');
-  }
-
-  const reservations = dal.public.getVolunteerReservationsForEvent(result.volunteerId, result.eventId).map(formatReservationRow);
-
-  const volunteerProfile = dal.public.getVolunteerById(result.volunteerId) || null;
-  const emailOptInValue = volunteerProfile && typeof volunteerProfile.email_opt_in !== 'undefined'
-    ? volunteerProfile.email_opt_in
-    : 1;
-  const volunteerForEmail = {
-    name: (volunteerProfile && volunteerProfile.name) || volunteerData.name.trim(),
-    email: (volunteerProfile && volunteerProfile.email) || volunteerData.email.trim(),
-    email_opt_in: emailOptInValue
+  const registrant = {
+    name: normalizeName(payload.registrant && payload.registrant.name ? payload.registrant.name : payload.name),
+    email: normalizeName(payload.registrant && payload.registrant.email ? payload.registrant.email : payload.email),
+    phone: normalizeName(payload.registrant && payload.registrant.phone ? payload.registrant.phone : payload.phone),
+    email_opt_in: payload.registrant && typeof payload.registrant.email_opt_in !== 'undefined'
+      ? payload.registrant.email_opt_in
+      : 1
   };
+  if (!registrant.name || !registrant.email) {
+    throw createError(400, 'Name and email are required.');
+  }
 
-  const token = issueManageToken(result.volunteerId, result.eventId);
+  // If this email already has active assignments for this event, short-circuit
+  // and send them their manage link instead of allowing a new registration.
+  try {
+    mergeRegistrationsForEmail(eventId, registrant.email);
+  } catch (err) {
+    // best-effort merge; continue
+  }
+  const existingRegs = dal.public.findRegistrationsByEmail(eventId, registrant.email) || [];
+  if (existingRegs.length) {
+    const reminder = await sendManageReminder(registrant.email, eventId);
+    const firstManageUrl = reminder && Array.isArray(reminder.manageUrls) && reminder.manageUrls[0];
+    return {
+      registrationId: existingRegs[0].registration_id,
+      eventId,
+      token: reminder && reminder.tokens && reminder.tokens[0] ? reminder.tokens[0].token : undefined,
+      manageUrl: firstManageUrl,
+      alreadyRegistered: true
+    };
+  }
+
+  const participantsInput = Array.isArray(payload.participants) ? payload.participants : [];
+  const participantNames = participantsInput.map(p => normalizeName(p && (p.name || p.participant_name || p)));
+  if (!participantNames.length) throw createError(400, 'Add at least one participant.');
+  ensureUniqueParticipants(participantNames);
+
+  const participantIndexByName = new Map();
+  participantNames.forEach((name, idx) => participantIndexByName.set(name.toLowerCase(), idx));
+
+  const scheduleAssignmentsRaw = Array.isArray(payload.scheduleAssignments) ? payload.scheduleAssignments : [];
+  const potluckAssignmentsRaw = Array.isArray(payload.potluckAssignments) ? payload.potluckAssignments : [];
+  if (!scheduleAssignmentsRaw.length && !potluckAssignmentsRaw.length) {
+    throw createError(400, 'Select at least one assignment.');
+  }
+
+  if (isPotluck && scheduleAssignmentsRaw.length) {
+    throw createError(400, 'This event uses item sign-ups. Please assign items instead of time slots.');
+  }
+  if (!isPotluck && potluckAssignmentsRaw.length) {
+    throw createError(400, 'This event uses scheduled time blocks. Please assign time blocks.');
+  }
+
+  const normalizedSched = isPotluck ? [] : scheduleAssignmentsRaw.map(item => {
+    const blockId = Number(item.blockId || item.time_block_id || item);
+    let idx = null;
+    if (Number.isFinite(Number(item.participantIndex))) {
+      idx = Number(item.participantIndex);
+    } else {
+      const participantName = normalizeName(item.participantName || item.participant);
+      idx = participantIndexByName.get(participantName.toLowerCase());
+    }
+    if (!Number.isFinite(blockId) || idx == null) throw createError(400, 'Each time block must have a participant.');
+    return { blockId, participantIndex: idx };
+  });
+  const normalizedPot = isPotluck ? potluckAssignmentsRaw.map(item => {
+    const blockId = Number(item.itemId || item.block_id || item);
+    let idx = null;
+    if (Number.isFinite(Number(item.participantIndex))) {
+      idx = Number(item.participantIndex);
+    } else {
+      const participantName = normalizeName(item.participantName || item.participant);
+      idx = participantIndexByName.get(participantName.toLowerCase());
+    }
+    const dish = normalizeDish(item.dishName || item.dish);
+    if (!Number.isFinite(blockId) || idx == null) throw createError(400, 'Each item must have a participant selected.');
+    if (!dish) throw createError(400, 'Please enter a dish name for each item.');
+    return { itemId: blockId, participantIndex: idx, dishName: dish };
+  }) : [];
+
+  const blockIds = isPotluck
+    ? normalizedPot.map(p => p.itemId)
+    : normalizedSched.map(s => s.blockId);
+  const blockInfo = dal.public.getBlocksInfo(blockIds);
+  if (!blockInfo || !blockInfo.length) throw createError(400, 'No valid selections were submitted.');
+  blockInfo.forEach(info => {
+    if (Number(info.event_id) !== Number(eventId)) {
+      throw createError(400, 'All selections must belong to the same event.');
+    }
+    const modeForBlock = String(info.signup_mode || '').toLowerCase();
+    if (modeForBlock !== (isPotluck ? 'potluck' : 'schedule')) {
+      throw createError(400, 'Selections do not match this event\'s sign-up mode.');
+    }
+  });
+
+  if (!isPotluck) {
+    const timeMap = buildTimeMap(blockInfo);
+    const byParticipant = new Map();
+    normalizedSched.forEach(assign => {
+      const idx = assign.participantIndex;
+      const list = byParticipant.get(idx) || [];
+      const meta = timeMap.get(assign.blockId) || { start: Number.NaN, end: Number.NaN };
+      list.push({ blockId: assign.blockId, ...meta });
+      byParticipant.set(idx, list);
+    });
+    byParticipant.forEach(list => {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          if (slotsOverlap(list[i], list[j])) {
+            throw createError(400, 'Assignments for a participant cannot overlap.');
+          }
+        }
+      }
+    });
+  }
+
+  // If this email already has registrations for this event, merge into the
+  // existing record so we don't create duplicate manage links.
+  let existing = mergeRegistrationsForEmail(eventId, registrant.email);
+  if (existing) {
+    const detail = dal.public.getRegistrationDetailWithAssignments(existing.registration_id);
+    const nameToPid = new Map();
+    (detail.participants || []).forEach(p => {
+      nameToPid.set(String(p.participant_name).trim().toLowerCase(), p.participant_id);
+    });
+
+    // Ensure all incoming participants exist (create missing)
+    participantNames.forEach(name => {
+      const key = String(name).trim().toLowerCase();
+      if (!nameToPid.has(key)) {
+        const addRes = dal.public.addParticipant(existing.registration_id, name);
+        nameToPid.set(key, addRes && addRes.participant_id);
+      }
+    });
+
+    const schedAssignments = [];
+    const potAssignments = [];
+
+    (detail.scheduleAssignments || []).forEach(a => {
+      schedAssignments.push({ participantId: a.participant_id, blockId: Number(a.time_block_id) });
+    });
+    (detail.potluckAssignments || []).forEach(a => {
+      potAssignments.push({ participantId: a.participant_id, itemId: Number(a.item_id), dishName: a.dish_name });
+    });
+
+    normalizedSched.forEach(a => {
+      const pid = nameToPid.get(participantNames[a.participantIndex].toLowerCase());
+      if (!pid) return;
+      schedAssignments.push({ participantId: pid, blockId: Number(a.blockId) });
+    });
+    normalizedPot.forEach(a => {
+      const pid = nameToPid.get(participantNames[a.participantIndex].toLowerCase());
+      if (!pid) return;
+      potAssignments.push({ participantId: pid, itemId: Number(a.itemId), dishName: a.dishName });
+    });
+
+    // Dedup to avoid double capacity counts
+    const schedSeen = new Set();
+    const potSeen = new Set();
+    const dedupSched = [];
+    const dedupPot = [];
+    schedAssignments.forEach(a => {
+      const key = `${a.participantId}:${a.blockId}`;
+      if (schedSeen.has(key)) return;
+      schedSeen.add(key);
+      dedupSched.push(a);
+    });
+    potAssignments.forEach(a => {
+      const key = `${a.participantId}:${a.itemId}:${a.dishName || ''}`;
+      if (potSeen.has(key)) return;
+      potSeen.add(key);
+      dedupPot.push(a);
+    });
+
+    dal.public.replaceRegistrationAssignments(existing.registration_id, eventId, dedupSched, dedupPot);
+    const registrationId = existing.registration_id;
+    const token = issueManageToken(registrationId);
+    const manageUrl = buildManageUrl(token);
+    const updatedDetail = dal.public.getRegistrationDetailWithAssignments(registrationId);
+    const participants = groupAssignments(updatedDetail);
+
+    await sendConfirmationEmail({
+      registration: {
+        registrant_name: registrant.name,
+        registrant_email: registrant.email,
+        email_opt_in: registrant.email_opt_in
+      },
+      event,
+      participants,
+      manageUrl,
+      isUpdate: true
+    });
+
+    return {
+      registrationId,
+      eventId,
+      token,
+      manageUrl,
+      alreadyRegistered: true
+    };
+  }
+
+  const result = dal.public.createRegistrationWithAssignments(
+    eventId,
+    registrant,
+    participantNames,
+    normalizedSched,
+    normalizedPot
+  );
+  const registrationId = result.registrationId;
+  const token = issueManageToken(registrationId);
   const manageUrl = buildManageUrl(token);
 
+  const detail = dal.public.getRegistrationDetailWithAssignments(registrationId);
+  const participants = groupAssignments(detail);
+
   await sendConfirmationEmail({
-    volunteer: volunteerForEmail,
+    registration: {
+      registrant_name: registrant.name,
+      registrant_email: registrant.email,
+      email_opt_in: registrant.email_opt_in
+    },
     event,
-    reservations,
+    participants,
     manageUrl,
-    isUpdate: result.count === 0
+    isUpdate: false
   });
 
   return {
-    count: result.count,
+    registrationId,
+    eventId,
     token,
-    eventId: result.eventId,
     manageUrl,
-    alreadyRegistered: result.count === 0
+    alreadyRegistered: false
   };
 }
 
-/**
- * Resolves the data required to render the manage-signup page given a token
- * from the volunteer’s email.
- */
 function getManageContext(token) {
   if (!token) return null;
-  const tokenRow = dal.public.getVolunteerToken(token);
-  if (!tokenRow) return null;
+  const registration = dal.public.getRegistrationByToken(token);
+  if (!registration) return null;
 
-  if (tokenRow.expires_at) {
-    const expiry = new Date(tokenRow.expires_at);
+  if (registration.manage_token_expires_at) {
+    const expiry = new Date(registration.manage_token_expires_at);
     if (Number.isFinite(expiry.getTime()) && expiry.getTime() < Date.now()) {
       return null;
     }
   }
 
-  const eventRows = dal.admin.getEventById(tokenRow.event_id);
-  const event = enrichPotluckDishNotes(mapEventRows(eventRows), tokenRow.event_id);
+  const eventRows = dal.admin.getEventById(registration.event_id);
+  const event = enrichPotluckDishNotes(mapEventRows(eventRows), registration.event_id);
   if (!event) return null;
 
-  const reservations = dal.public.getVolunteerReservationsForEvent(tokenRow.volunteer_id, tokenRow.event_id)
-    .map(formatReservationRow);
+  const detail = dal.public.getRegistrationDetailWithAssignments(registration.registration_id);
+  const participants = groupAssignments(detail);
 
   return {
-    token: tokenRow,
+    registration,
     event,
-    reservations
+    participants
   };
 }
 
-/**
- * Replaces the volunteer's reservations for an event with the provided block
- * IDs, reissues the management token, and sends a confirmation email.
- */
-async function updateVolunteerSignup(token, blockIds, notesMap) {
+async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignments, options = {}) {
   const context = getManageContext(token);
-  if (!context) {
-    throw createError(410, 'This link has expired or is no longer valid.');
+  if (!context) throw createError(410, 'This link has expired or is no longer valid.');
+
+  const event = context.event;
+  const registration = context.registration;
+  const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
+
+  const assignmentsSched = Array.isArray(scheduleAssignments) ? scheduleAssignments : [];
+  const assignmentsPot = Array.isArray(potluckAssignments) ? potluckAssignments : [];
+
+  const hasAssignments = assignmentsSched.length || assignmentsPot.length;
+  // Allow clearing all assignments (un-volunteer) via manage link
+  if (isPotluck && assignmentsSched.length) {
+    throw createError(400, 'This event uses item sign-ups. Please assign items instead of time slots.');
+  }
+  if (!isPotluck && assignmentsPot.length) {
+    throw createError(400, 'This event uses scheduled time blocks. Please assign time blocks.');
   }
 
-  const nextIds = Array.isArray(blockIds) ? blockIds.map(id => Number(id)).filter(Number.isFinite) : [];
-  // Normalize dish notes for saving/validation
-  const normalizedNotes = {};
-  if (Array.isArray(notesMap)) {
-    notesMap.forEach((val, idx) => {
-      const bid = Number(nextIds[idx]);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(val);
+  const participantRows = dal.public.getRegistrationDetailWithAssignments(registration.registration_id).participants || [];
+  const participantSet = new Set(participantRows.map(p => Number(p.participant_id)));
+
+  const normalizedSched = isPotluck ? [] : assignmentsSched.map(a => {
+    const blockId = Number(a.blockId || a.time_block_id || a);
+    const participantId = Number(a.participantId || a.participant_id);
+    if (!participantSet.has(participantId)) throw createError(400, 'Invalid participant selection.');
+    return { blockId, participantId };
+  });
+  const normalizedPot = isPotluck ? assignmentsPot.map(a => {
+    const blockId = Number(a.itemId || a.block_id || a);
+    const participantId = Number(a.participantId || a.participant_id);
+    const dish = normalizeDish(a.dishName || a.dish);
+    if (!participantSet.has(participantId)) throw createError(400, 'Invalid participant selection.');
+    if (!dish) throw createError(400, 'Please enter a dish name for each item.');
+    return { itemId: blockId, participantId, dishName: dish };
+  }) : [];
+
+  // De-dup assignments (participant, block) to avoid double-counting during capacity checks
+  const schedSeen = new Set();
+  const dedupSched = [];
+  normalizedSched.forEach(a => {
+    const key = `${a.participantId}:${a.blockId}`;
+    if (schedSeen.has(key)) return;
+    schedSeen.add(key);
+    dedupSched.push(a);
+  });
+  const potSeen = new Set();
+  const dedupPot = [];
+  normalizedPot.forEach(a => {
+    const key = `${a.participantId}:${a.itemId}:${a.dishName}`;
+    if (potSeen.has(key)) return;
+    potSeen.add(key);
+    dedupPot.push(a);
+  });
+
+  const blockIds = isPotluck
+    ? dedupPot.map(p => p.itemId)
+    : dedupSched.map(s => s.blockId);
+  const blockInfo = blockIds.length ? dal.public.getBlocksInfo(blockIds) : [];
+  if (blockIds.length && !blockInfo.length) throw createError(400, 'No valid selections were submitted.');
+  if (blockInfo.length) {
+    blockInfo.forEach(info => {
+      if (Number(info.event_id) !== Number(registration.event_id)) {
+        throw createError(400, 'All selections must belong to the same event.');
+      }
     });
-  } else if (notesMap && typeof notesMap === 'object') {
-    Object.keys(notesMap).forEach(key => {
-      const bid = Number(key);
-      if (Number.isFinite(bid)) normalizedNotes[bid] = normalizeDishNote(notesMap[key]);
+  }
+
+  if (!isPotluck && blockInfo.length) {
+    const timeMap = buildTimeMap(blockInfo);
+    const byParticipant = new Map();
+    normalizedSched.forEach(assign => {
+      const pid = assign.participantId;
+      const list = byParticipant.get(pid) || [];
+      const meta = timeMap.get(assign.blockId) || { start: Number.NaN, end: Number.NaN };
+      list.push({ blockId: assign.blockId, ...meta });
+      byParticipant.set(pid, list);
+    });
+    byParticipant.forEach(list => {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          if (slotsOverlap(list[i], list[j])) {
+            throw createError(400, 'Assignments for a participant cannot overlap.');
+          }
+        }
+      }
     });
   }
 
-  // Validate "Other" requires dish for potluck
-  const blocksInfo = dal.public.getBlocksInfo(nextIds);
-  const isPotluck = String(context.event.signup_mode || '') === 'potluck';
-  if (isPotluck) {
-    const missing = blocksInfo.filter(b => !String(normalizedNotes[b.block_id] || '').trim().length);
-    if (missing.length) throw createError(400, 'Please enter a dish name for each selected item.');
+  const replaceResult = dal.public.replaceRegistrationAssignments(
+    registration.registration_id,
+    registration.event_id,
+    dedupSched,
+    dedupPot,
+    { debugCapacity: options.debugCapacity }
+  );
+
+  // If everything was cleared, remove the registration to avoid stale manage links.
+  if (!dedupSched.length && !dedupPot.length) {
+    try { dal.public.deleteRegistrationCascade(registration.registration_id); } catch (_) {}
+    return {
+      registration: null,
+      event,
+      participants: [],
+      debug: replaceResult && replaceResult.debug,
+      deleted: true,
+      eventId: event.event_id
+    };
   }
 
-  dal.public.replaceVolunteerReservations(context.token.volunteer_id, context.token.event_id, nextIds, normalizedNotes);
-
-  const updatedReservations = dal.public.getVolunteerReservationsForEvent(context.token.volunteer_id, context.token.event_id)
-    .map(formatReservationRow);
-  const event = dal.public.getEventBasic(context.token.event_id);
-
+  const detail = dal.public.getRegistrationDetailWithAssignments(registration.registration_id);
+  const participants = groupAssignments(detail);
   const expiresAt = computeExpiryDate();
-  dal.public.storeVolunteerToken(token, context.token.volunteer_id, context.token.event_id, expiresAt);
+  dal.public.storeRegistrationToken(token, registration.registration_id, expiresAt);
 
   await sendConfirmationEmail({
-    volunteer: {
-      name: context.token.volunteer_name,
-      email: context.token.volunteer_email,
-      email_opt_in: context.token.email_opt_in
-    },
+    registration,
     event,
-    reservations: updatedReservations,
+    participants,
     manageUrl: buildManageUrl(token),
     isUpdate: true
   });
 
-  return {
-    reservations: updatedReservations,
-    event
-  };
+  return { registration, event, participants, debug: replaceResult && replaceResult.debug };
 }
 
-/**
- * Email a fresh manage link to the provided email for the given event, if a
- * volunteer record exists. We always generate/store a token so returning users
- * can manage even if they currently have no reservations.
- */
 async function sendManageReminder(email, eventId) {
-  const inputEmail = String(email).trim();
-  const v = dal.public.getVolunteerByEmail(inputEmail);
-  const event = dal.public.getEventBasic(Number(eventId));
-  if (!event || !v) {
-    return; // silent: controller shows generic success
+  const inputEmail = String(email || '').trim();
+  const eventIdNum = Number(eventId);
+  const event = dal.public.getEventBasic(eventIdNum);
+  if (!event || !inputEmail) return;
+
+  let registrations = dal.public.findRegistrationsByEmail(eventIdNum, inputEmail) || [];
+  if (!registrations.length) return;
+
+  // Try to merge duplicates so the person gets a single link. If merging fails
+  // (e.g., over-capacity edge cases), fall back to sending multiple links.
+  try {
+    const merged = mergeRegistrationsForEmail(eventIdNum, inputEmail);
+    if (merged) {
+      registrations = dal.public.findRegistrationsByEmail(eventIdNum, inputEmail) || [merged];
+    }
+  } catch (err) {
+    console.error('Failed to merge registrations for reminder; falling back to multi-link email:', err);
   }
-  // If we matched a previously-normalized Gmail record, promote it to the exact email provided now
-  if (v && v._matchedBy === 'gmail_canonical_alt' && v.email !== inputEmail) {
-    try { dal.admin.updateVolunteer(v.volunteer_id, v.name, inputEmail, v.phone_number || ''); } catch (_) {}
-  }
-  const token = issueManageToken(v.volunteer_id, Number(eventId));
-  const manageUrl = buildManageUrl(token);
+
+  if (!registrations.length) return;
+
+  const tokens = registrations.map(reg => {
+    const token = issueManageToken(reg.registration_id);
+    return {
+      reg,
+      token,
+      manageUrl: buildManageUrl(token)
+    };
+  });
+
+  const primaryReg = tokens[0].reg;
+  const isMulti = tokens.length > 1;
+  const subject = isMulti
+    ? `Manage your signups for ${event.name}`
+    : `Manage your signup for ${event.name}`;
   const { supportName, supportEmail, supportPhone, supportContactHtml, orgName, orgMailingAddress } = resolveSupportContact();
-  const greetingName = v.name || inputEmail;
-  const subject = `Manage your signup for ${event.name}`;
-  const isOptedOut = Number(v.email_opt_in) === 0;
   const contactLines = [];
   if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
   if (supportPhone) contactLines.push(`Phone: ${supportPhone}`);
@@ -690,18 +1049,19 @@ async function sendManageReminder(email, eventId) {
     supportEmail,
     supportPhone,
     mailingAddress: orgMailingAddress,
-    manageUrl
+    manageUrl: tokens[0].manageUrl
   });
   const textParts = [
-    `Hi ${greetingName},`,
+    `Hi ${primaryReg.registrant_name || inputEmail},`,
     '',
-    `Use the link below to view or edit your selections for ${event.name}.`,
-    '',
-    manageUrl
+    isMulti
+      ? `We found multiple signups for ${event.name} with this email. Use the links below to manage each one.`
+      : `Use the link below to view or edit your group selections for ${event.name}.`,
+    ''
   ];
-  if (isOptedOut) {
-    textParts.push('', 'You’re currently unsubscribed from volunteer reminder emails. We’re sending this manage link because you requested it. Update your preference on the manage page if you’d like to resume confirmations.');
-  }
+  tokens.forEach((t, idx) => {
+    textParts.push(`Signup ${idx + 1}: ${t.manageUrl}`);
+  });
   if (contactLines.length) {
     textParts.push('', 'Need help? Contact us:', ...contactLines);
   } else {
@@ -712,66 +1072,66 @@ async function sendManageReminder(email, eventId) {
     textParts.push('', ...complianceFooter.textLines);
   }
   const text = textParts.join('\n');
+
+  const multiListHtml = tokens.map((t, idx) => `
+      <li style="margin-bottom:10px;">
+        <div style="font-weight:600; color:#0f172a; margin-bottom:6px;">Signup ${idx + 1}</div>
+        <a href="${t.manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:10px 18px; font-size:14px; border-radius:12px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
+          Open manage link
+        </a>
+        <div style="margin-top:8px; color:#1d4ed8; font-size:13px; word-break:break-all;">
+          <a href="${t.manageUrl}" style="color:#1d4ed8;">${t.manageUrl}</a>
+        </div>
+      </li>`).join('');
+
+  const singleHtmlBlock = (t) => `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px;">
+        <tr>
+          <td align="center" role="presentation">
+            <a href="${t.manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
+              Manage Your Signup
+            </a>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0 0 12px; color:#475569; font-size:14px;">If the button doesn't work, copy and paste this URL into your browser:</p>
+      <p style="margin:0 0 24px; color:#1d4ed8; font-size:14px; word-break:break-all;"><a href="${t.manageUrl}" style="color:#1d4ed8;">${t.manageUrl}</a></p>
+  `;
+
   const html = `<!DOCTYPE html>
-    <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+    <html lang="en">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <title>${subject}</title>
-        <style>
-          table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
-          a { text-decoration:none; }
-        </style>
-        <!--[if mso]>
-        <style type="text/css">
-          body, table, td { font-family: 'Segoe UI', Arial, sans-serif !important; }
-        </style>
-        <![endif]-->
       </head>
       <body style="margin:0; padding:0; background-color:#dfe4f3;">
         <div role="article" aria-roledescription="email" lang="en" style="background-color:#dfe4f3;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#dfe4f3; margin:0;">
             <tr>
               <td align="center" style="padding:32px 16px;">
-                <!--[if mso]>
-                  <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0">
-                    <tr>
-                      <td>
-                <![endif]-->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px; background-color:#ffffff; border-radius:18px; box-shadow:0 20px 38px rgba(15,23,42,0.12); overflow:hidden;" bgcolor="#ffffff">
                   <tr>
                     <td bgcolor="#2563eb" style="background-color:#2563eb; padding:28px 32px; color:#ffffff; font-family:'Segoe UI', Arial, sans-serif;">
                       <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em;">Need to make an update?</h1>
-                      <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">Open your manage link for <strong>${event.name}</strong> to view or edit your selections.</p>
+                      <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">
+                        ${isMulti
+                          ? `We found multiple signups for <strong>${escapeHtml(event.name)}</strong>. Use the links below to manage each one.`
+                          : `Open your manage link for <strong>${escapeHtml(event.name)}</strong> to view or edit your selections.`}
+                      </p>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
-                      <p style="margin:0 0 16px; font-size:16px;">Hi ${greetingName},</p>
-                      <p style="margin:0 0 24px; color:#475569; line-height:1.7;">Use the button below to access your personal manage page.</p>
-                      ${isOptedOut ? '<p style="margin:0 0 24px; color:#475569; line-height:1.7;">You&rsquo;re currently unsubscribed from automated volunteer reminders. This manage link was sent because you requested it. Update your preference after opening the link if you would like to resume confirmations.</p>' : ''}
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px;">
-                        <tr>
-                          <td align="center" role="presentation">
-                            <!--[if mso]>
-                              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${manageUrl}" style="height:48px; v-text-anchor:middle; width:240px;" arcsize="50%" stroke="f" fillcolor="#2563eb">
-                                <w:anchorlock/>
-                                <center style="color:#ffffff; font-family:'Segoe UI', Arial, sans-serif; font-size:15px; font-weight:600;">
-                                  Manage Your Signup
-                                </center>
-                              </v:roundrect>
-                            <![endif]-->
-                            <!--[if !mso]><!-- -->
-                              <a href="${manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
-                                Manage Your Signup
-                              </a>
-                            <!--<![endif]-->
-                          </td>
-                        </tr>
-                      </table>
-                      <p style="margin:0 0 12px; color:#475569; font-size:14px;">If the button doesn't work, copy and paste this URL into your browser:</p>
-                      <p style="margin:0 0 24px; color:#1d4ed8; font-size:14px; word-break:break-all;"><a href="${manageUrl}" style="color:#1d4ed8;">${manageUrl}</a></p>
+                      <p style="margin:0 0 16px; font-size:16px;">Hi ${escapeHtml(primaryReg.registrant_name || inputEmail)},</p>
+                      <p style="margin:0 0 24px; color:#475569; line-height:1.7;">
+                        ${isMulti
+                          ? 'Use the manage links below to view or edit each signup.'
+                          : 'Use the button below to access your personal manage page.'}
+                      </p>
+                      ${isMulti
+                        ? `<ul style="padding-left:18px; margin:0 0 24px; list-style:disc;">${multiListHtml}</ul>`
+                        : singleHtmlBlock(tokens[0])}
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(15,23,42,0.08); margin-top:16px; padding-top:24px;">
                         <tr>
                           <td style="font-family:'Segoe UI', Arial, sans-serif;">
@@ -780,7 +1140,7 @@ async function sendManageReminder(email, eventId) {
                           </td>
                         </tr>
                       </table>
-                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${supportName || 'Volunteer Team'}</strong></p>
+                      <p style="margin:32px 0 0; color:#475569; font-family:'Segoe UI', Arial, sans-serif;">With gratitude,<br /><strong>${escapeHtml(supportName || 'Volunteer Team')}</strong></p>
                       ${complianceFooter.htmlBlock || ''}
                     </td>
                   </tr>
@@ -790,11 +1150,6 @@ async function sendManageReminder(email, eventId) {
                     </td>
                   </tr>
                 </table>
-                <!--[if mso]>
-                      </td>
-                    </tr>
-                  </table>
-                <![endif]-->
               </td>
             </tr>
           </table>
@@ -803,18 +1158,24 @@ async function sendManageReminder(email, eventId) {
     </html>`;
   try {
     const headers = complianceFooter.listUnsubscribe ? { 'List-Unsubscribe': complianceFooter.listUnsubscribe } : undefined;
-    await sendMail({ to: v.email, subject, text, html, headers });
+    await sendMail({ to: primaryReg.registrant_email, subject, text, html, headers });
   } catch (err) {
     console.error('Failed to send manage reminder email:', err);
   }
+
+  return {
+    registrations,
+    tokens,
+    manageUrls: tokens.map(t => t.manageUrl)
+  };
 }
 
 async function updateEmailPreference(tokenValue, preference, reason) {
   if (!tokenValue) {
     throw createError(400, 'Missing management token.');
   }
-  const tokenRow = dal.public.getVolunteerToken(tokenValue);
-  if (!tokenRow) {
+  const registration = dal.public.getRegistrationByToken(tokenValue);
+  if (!registration) {
     throw createError(410, 'This manage link expired. Please request a new one.');
   }
 
@@ -829,20 +1190,63 @@ async function updateEmailPreference(tokenValue, preference, reason) {
   }
 
   const reasonClean = shouldOptIn ? null : (typeof reason === 'string' ? reason.trim().slice(0, 500) : null);
-  dal.public.setVolunteerEmailPreference(tokenRow.volunteer_id, {
+  dal.public.setRegistrationEmailPreference(registration.registration_id, {
     optIn: shouldOptIn,
     reason: reasonClean
   });
 
   return {
     optedIn: shouldOptIn,
-    volunteer: {
-      id: tokenRow.volunteer_id,
-      email: tokenRow.volunteer_email,
-      name: tokenRow.volunteer_name
+    registration: {
+      id: registration.registration_id,
+      email: registration.registrant_email,
+      name: registration.registrant_name
     },
-    eventId: tokenRow.event_id
+    eventId: registration.event_id
   };
+}
+
+function requireManageContext(token) {
+  const ctx = getManageContext(token);
+  if (!ctx) throw createError(410, 'This link has expired or is no longer valid.');
+  return ctx;
+}
+
+function renameParticipant(token, participantId, newName) {
+  const ctx = requireManageContext(token);
+  const trimmed = normalizeName(newName);
+  if (!trimmed) throw createError(400, 'Enter a participant name.');
+  const lower = trimmed.toLowerCase();
+  const collision = ctx.participants.some(p => p.participant_id !== Number(participantId) && p.participant_name.toLowerCase() === lower);
+  if (collision) throw createError(409, 'Another participant already has that name.');
+  dal.public.renameParticipant(ctx.registration.registration_id, participantId, trimmed);
+  return getManageContext(token);
+}
+
+function addParticipant(token, newName) {
+  const ctx = requireManageContext(token);
+  const trimmed = normalizeName(newName);
+  if (!trimmed) throw createError(400, 'Enter a participant name.');
+  const lower = trimmed.toLowerCase();
+  const collision = ctx.participants.some(p => p.participant_name.toLowerCase() === lower);
+  if (collision) throw createError(409, 'Another participant already has that name.');
+  dal.public.addParticipant(ctx.registration.registration_id, trimmed);
+  return getManageContext(token);
+}
+
+function mergeParticipants(token, fromId, toId) {
+  const ctx = requireManageContext(token);
+  const existsFrom = ctx.participants.some(p => p.participant_id === Number(fromId));
+  const existsTo = ctx.participants.some(p => p.participant_id === Number(toId));
+  if (!existsFrom || !existsTo) throw createError(404, 'Participant not found.');
+  dal.public.mergeParticipants(ctx.registration.registration_id, Number(fromId), Number(toId));
+  return getManageContext(token);
+}
+
+function deleteParticipant(token, participantId, removeAssignments) {
+  const ctx = requireManageContext(token);
+  dal.public.deleteParticipant(ctx.registration.registration_id, participantId, removeAssignments);
+  return getManageContext(token);
 }
 
 module.exports = {
@@ -853,5 +1257,11 @@ module.exports = {
   getManageContext,
   updateVolunteerSignup,
   sendManageReminder,
-  updateEmailPreference
+  checkDuplicateRegistration,
+  updateEmailPreference,
+  renameParticipant,
+  addParticipant,
+  mergeParticipants,
+  deleteParticipant,
+  mergeAllDuplicatesForEvent
 };

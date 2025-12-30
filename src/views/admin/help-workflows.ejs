@@ -4,41 +4,37 @@
   <div>
     <a href="/admin/dashboard" class="btn-link">&larr; Back to dashboard</a>
     <h1>Workflow help</h1>
-    <p class="muted">Step-by-step guidance for running schedule-based events and food prep-style sign-ups.</p>
+    <p class="muted">Simple, copy-and-follow steps for running schedule events and food prep sign-ups. Keep this open in another tab while you work.</p>
   </div>
 </section>
 
 <section class="page-section page-shell">
   <article class="card card--plain">
-    <h2>Scheduled events (stations & time slots)</h2>
+    <h2>Scheduled events (with times)</h2>
     <ol class="muted">
-      <li><strong>Create the event:</strong> Click “Create new event”, enter name/description, set Start and End, choose “Volunteer schedule”. Save.</li>
-      <li><strong>Add stations:</strong> Click “Add station”, enter Station name and description/duties. Save.</li>
-      <li><strong>Add time blocks:</strong> In each station card, press “Add time block”. Set Start, End, and Slots (capacity), then Save.</li>
-      <li><strong>Add consecutive blocks quickly:</strong> After saving a block, use the “Add next block” button in that station to prefill the next Start/End based on the prior duration, adjust if needed, then Save.</li>
-      <li><strong>Reorder stations:</strong> Click “Reorder stations”. Drag the ☰ handle to reorder, or press “Sort by date & time” to auto-order, then OK.</li>
-      <li><strong>Publish:</strong> Press “Publish” so volunteers can see and sign up. Unpublish to hide it again.</li>
-      <li><strong>Move volunteers:</strong> Click a filled slot’s “Move”, pick the new station/time, and confirm.</li>
-      <li><strong>Adjust slots:</strong> Click the Slots number in a station card to edit capacity, then save.</li>
-      <li><strong>Print/export:</strong> Use “Actions → Printable PDF” or “Actions → Quick Export/Advanced Export” for rosters.</li>
+      <li><strong>Create the event:</strong> Click “Create new event,” choose “Volunteer schedule,” set start/end times, and Save.</li>
+      <li><strong>Add stations:</strong> Press “Add station,” give it a short name and duties. Save.</li>
+      <li><strong>Add blocks:</strong> Inside the station, click “Add time block,” set Start, End, and Slots (how many people you need). Save.</li>
+      <li><strong>Keep adding:</strong> Use “Add next block” to quickly stack back-to-back times, or “Reorder stations” to drag them into a better order.</li>
+      <li><strong>Publish when ready:</strong> Hit “Publish” so volunteers can see it. Switch back to Draft to hide it without deleting anything.</li>
+      <li><strong>Make changes:</strong> Click a slot’s “Move” to reassign, or “Add volunteer” to place someone directly. The system blocks overlapping times for the same person.</li>
+      <li><strong>Share/download:</strong> Use “Actions → Printable PDF” for a simple roster or “Export” buttons for CSVs.</li>
     </ol>
-    <p class="muted small">Tip: keep station descriptions brief; use <code>**bold**</code> for key instructions.</p>
+    <p class="muted small">Tip: Short descriptions with <code>**bold**</code> keywords are easier for volunteers to scan.</p>
   </article>
 </section>
 
 <section class="page-section page-shell">
   <article class="card card--plain">
-    <h2>Food Prep events (categories & items, no times)</h2>
+    <h2>Food Prep events (no times, just items)</h2>
     <ol class="muted">
-      <li><strong>Create the event:</strong> Click “Create new event” and choose “Food Prep (categories & items, no times)”. Save.</li>
-      <li><strong>Add categories:</strong> Click “Add category”, name it (e.g., Main dishes, Sides), add a short description. Save.</li>
-      <li><strong>Add items:</strong> Within a category, click “Add item”. Enter Item name and optional Feeds (min/max). Save.</li>
-      <li><strong>Reorder items:</strong> Click “Manage → Reorder items…” in a category (or “Reorder items” in the modal) and drag ☰ to set the display order.</li>
-      <li><strong>Reorder categories:</strong> Click “Reorder categories”, drag ☰ to set order, then OK.</li>
-      <li><strong>Publish:</strong> Press “Publish”. Volunteers choose items directly; capacity is the number of items.</li>
-      <li><strong>Collect notes:</strong> Volunteers can add dish notes; see them in the roster and exports.</li>
+      <li><strong>Create the event:</strong> Click “Create new event,” choose “Food Prep (categories & items, no times),” and Save.</li>
+      <li><strong>Set categories:</strong> “Add category” for groups like Mains, Sides, Desserts. Keep descriptions short.</li>
+      <li><strong>Add items:</strong> Inside a category, press “Add item.” Name it and add a “Feeds” range if you want size guidance. Save.</li>
+      <li><strong>Organize:</strong> Use “Reorder categories” or “Manage → Reorder items” to drag them into the order volunteers should see.</li>
+      <li><strong>Publish:</strong> Hit “Publish.” Each item counts as one slot; volunteers add dish names when they sign up.</li>
     </ol>
-    <p class="muted small">Tip: set Feeds ranges (e.g., 6–8) on items so you can balance sign-ups.</p>
+    <p class="muted small">Tip: Use the Feeds range (e.g., 6–8) to balance how much food you get.</p>
   </article>
 </section>
 
@@ -46,11 +42,12 @@
   <article class="card card--plain">
     <h2>Common tasks</h2>
     <ul class="muted">
-      <li><strong>Move a volunteer:</strong> On the event page, select a reservation’s “Move” option and pick a new slot.</li>
-      <li><strong>Adjust capacity:</strong> Click a station’s slot count to edit capacity inline.</li>
-      <li><strong>Reorder stations/items:</strong> Use “Reorder stations” (or “Reorder categories” in food prep mode) and drag the ☰ handles. For food prep events, open a category → “Manage → Reorder items…” and drag to reorder. You can also auto-sort stations by date &amp; time in the reorder modal.</li>
-      <li><strong>Close sign-ups:</strong> Unpublish the event to hide it from volunteers without deleting data.</li>
-      <li><strong>Duplicate an event:</strong> Use “Copy event” to clone structure (stations/slots) without volunteers.</li>
+      <li><strong>Move a volunteer:</strong> Click “Move” on their slot, pick the new spot, and Save. Overlaps are blocked automatically.</li>
+      <li><strong>Adjust capacity:</strong> Click the Slots number on a station to raise or lower how many people you need.</li>
+      <li><strong>Reorder:</strong> Use “Reorder stations” (or “Reorder categories”) and drag the ☰ handle. In Food Prep, open a category then “Manage → Reorder items” to drag items.</li>
+      <li><strong>Close sign-ups:</strong> Switch to Draft/Private to hide the event without losing data.</li>
+      <li><strong>Copy an event:</strong> “Copy event” makes a fresh Draft with the same stations/items but no volunteers.</li>
+      <li><strong>Fix duplicate emails:</strong> Each email has one manage link. Use the maintenance “merge duplicates” tool if needed.</li>
     </ul>
   </article>
 </section>
@@ -59,9 +56,9 @@
   <article class="card card--plain">
     <h2 id="visibility">Publish & visibility</h2>
     <ul class="muted">
-      <li><strong>Draft</strong>: Only admins can view (preview). Hidden from the Upcoming Sign-ups list.</li>
-      <li><strong>Private link</strong>: Hidden from the Upcoming Sign-ups list but reachable by anyone with the direct link.</li>
-      <li><strong>Public</strong>: Listed on Upcoming Sign-ups and accessible by link.</li>
+      <li><strong>Draft</strong>: Admins only. Hidden from the public list.</li>
+      <li><strong>Private link</strong>: Not on the list, but anyone with the link can view.</li>
+      <li><strong>Public</strong>: Shows on the Upcoming Sign-ups page and via direct link.</li>
     </ul>
   </article>
 </section>
@@ -70,7 +67,7 @@
   <article class="card card--plain">
     <h2>Need more help?</h2>
     <p class="muted">Formatting guide: <a href="/admin/help/formatting">open in a new window</a></p>
-    <p class="muted small">For issues, capture a screenshot and the event URL to speed up troubleshooting.</p>
+    <p class="muted small">If something looks wrong, copy the page link and grab a screenshot. Share both when asking for help.</p>
   </article>
 </section>
 

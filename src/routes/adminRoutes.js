@@ -41,4 +41,7 @@ router.post('/event/:eventId/delete', isAuthenticated, adminController.deleteEve
 router.post('/station/:stationId/delete', isAuthenticated, adminController.deleteStation);
 router.post('/block/:blockId/delete', isAuthenticated, adminController.deleteTimeBlock);
 
+// Maintenance ----------------------------------------------------------------
+router.get('/maintenance/merge-duplicates', isAuthenticated, adminController.mergeAllDuplicates);
+
 module.exports = router;

@@ -1,6 +1,15 @@
 // Small view helpers for formatting dates and rich text used by EJS templates.
 // Keep pure JS and minimal dependencies so templates remain fast and safe.
 
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function parseToDate(s) {
   if (!s) return null;
   const str = String(s).trim();
@@ -69,15 +78,6 @@ function renderRichText(input) {
   if (!input) return '';
   const text = String(input || '').replace(/\r\n/g, '\n');
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   function applyInlineMarkup(str) {
     let s = escapeHtml(str);
     // Bold: **text**
@@ -134,4 +134,4 @@ function renderRichText(input) {
   return out.join('');
 }
 
-module.exports = { fmt12, canonicalLocal, fmtRange, renderRichText };
+module.exports = { fmt12, canonicalLocal, fmtRange, renderRichText, escapeHtml };

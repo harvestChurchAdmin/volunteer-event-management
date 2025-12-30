@@ -1,4 +1,5 @@
-// src/routes/publicRoutes.js (Definitive Final Version)
+// src/routes/publicRoutes.js
+// Public-facing routes for volunteers plus the login entry point for admins.
 const express = require('express');
 const router = express.Router();
 const passport = require('passport');
@@ -77,6 +78,9 @@ router.post('/manage/remind', async (req, res) => {
     return res.redirect(eventId ? `/events/${eventId}` : '/events');
   }
 });
+
+// Duplicate check (AJAX) for step 1: if a registration already exists, send manage link.
+router.post('/manage/check-duplicate', publicController.checkDuplicateRegistration);
 
 // Manage existing signup via emailed token
 router.get('/manage/:token', publicController.showManageSignup);

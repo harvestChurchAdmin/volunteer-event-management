@@ -9,7 +9,9 @@
     body { background: white !important; }
     .page-shell { width: 100% !important; margin: 0 !important; }
     .card { box-shadow: none !important; border: 1px solid #e5e7eb; }
-    .time-block { page-break-inside: avoid; }
+    .roster-station { page-break-inside: avoid; break-inside: avoid; }
+    .roster-station .card-header { page-break-after: avoid; break-after: avoid-page; }
+    .time-block { page-break-inside: avoid; break-inside: avoid; }
   }
   .print-actions { display: flex; gap: 0.5rem; }
   .roster-section { margin-bottom: 1.5rem; }
@@ -23,8 +25,15 @@
   .vol-list { margin: 0.2rem 0 0.1rem 1.2rem; }
   .vol-list li { margin: 0.1rem 0; }
   .vol-list { margin: 0.25rem 0 0; padding-left: 1.1rem; }
-  .vol-list li { margin: 0.15rem 0; }
-  .vol-contact { color: var(--text-soft); }
+  .vol-list li { margin: 0.2rem 0; }
+  .vol-contact { color: var(--text-soft); display: block; }
+  .vol-registrant { color: var(--text-soft); font-weight: 600; display: block; }
+  .vol-note { color: var(--text-soft); display: block; }
+  .compact-meta { font-size: 0.9rem; color: var(--text-soft); }
+  @media print {
+    .time-block__header { flex-wrap: wrap; }
+    .vol-contact, .vol-registrant, .vol-note { font-size: 0.9rem; }
+  }
 </style>
 
 <section class="page-header page-shell">
@@ -75,8 +84,11 @@
                     <% block.reservations.forEach(function(r) { %>
                       <li>
                         <strong><%= r.name %></strong>
-                        <span class="vol-contact"> — <%= r.email %><% if (r.phone) { %> • <%= r.phone %><% } %></span>
-                        <% if (r.reservation_note) { %> <span class="vol-contact"> • Dish: <%= r.reservation_note %></span><% } %>
+                        <span class="vol-contact"><%= r.email %><% if (r.phone) { %> • <%= r.phone %><% } %></span>
+                        <% if (r.registrant_name || r.registrant_email) { %>
+                          <span class="vol-registrant">Registrant: <%= r.registrant_name || '—' %><% if (r.registrant_email) { %> • <%= r.registrant_email %><% } %></span>
+                        <% } %>
+                        <% if (r.reservation_note) { %> <span class="vol-note">Dish: <%= r.reservation_note %></span><% } %>
                       </li>
                     <% }) %>
                   </ol>

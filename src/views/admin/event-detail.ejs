@@ -258,6 +258,15 @@ const manageViewLabel = isDraft ? 'Preview public page' : (isPrivate ? 'Open pri
 <%- include('../partials/modal-end', { id: 'visibilityHelpModal', footer: visibilityModalFooter }) %>
 
 <%- include('../partials/messages', { messages }) %>
+<% const modalBlock = (typeof locals.modalBlock !== 'undefined' && locals.modalBlock !== null) ? locals.modalBlock : (query && query.modalBlock); %>
+<% const modalError = (query && query.modalError) || ((messages && messages.error && messages.error[0]) ? messages.error[0] : ''); %>
+<% const modalDebug = (messages && messages.debug && messages.debug[0]) ? messages.debug[0] : ''; %>
+<% if (modalBlock || modalError || modalDebug) { %>
+  <div id="modal-error-data"
+       data-block-id="<%= modalBlock || '' %>"
+       data-message="<%= modalError %>"
+       data-debug="<%- modalDebug ? helpers.escapeHtml(modalDebug) : '' %>"></div>
+<% } %>
 
 <!-- Stations: listing + management modals -->
 <section class="page-section page-shell">
@@ -503,6 +512,9 @@ const manageViewLabel = isDraft ? 'Preview public page' : (isPrivate ? 'Open pri
                               </div>
                               <div class="admin-reservation__info">
                                 <span><%= reservation.email %></span>
+                                <% if (reservation.registrant_name) { %>
+                                  <span class="admin-reservation__registrant" title="Registrant">Registrant: <%= reservation.registrant_name %></span>
+                                <% } %>
                                 <% if (reservation.phone) { %>
                                   <span><%= reservation.phone %></span>
                                 <% } %>
@@ -612,7 +624,17 @@ const manageViewLabel = isDraft ? 'Preview public page' : (isPrivate ? 'Open pri
                     <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
                     <input type="hidden" name="eventId" value="<%= event.event_id %>">
                     <input type="hidden" name="station_id" value="<%= station.station_id %>">
+                    <input type="hidden" name="is_potluck" value="<%= isPotluck ? 'true' : 'false' %>">
                     <div class="form-grid">
+                      <div class="form-group">
+                        <label for="add-reservation-participant-<%= block.block_id %>">Participant name</label>
+                        <input type="text" id="add-reservation-participant-<%= block.block_id %>" name="participant_name" placeholder="If different from registrant">
+                        <p class="form-help">Leave blank to use the registrant as the participant.</p>
+                      </div>
+                      <div class="form-group">
+                        <label for="add-reservation-registrant-<%= block.block_id %>">Registrant name (optional)</label>
+                        <input type="text" id="add-reservation-registrant-<%= block.block_id %>" name="registrant_name" placeholder="Household / primary contact">
+                      </div>
                       <div class="form-group">
                         <label for="add-reservation-name-<%= block.block_id %>">Name</label>
                         <input type="text" id="add-reservation-name-<%= block.block_id %>" name="name" required>

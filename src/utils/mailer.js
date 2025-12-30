@@ -1,3 +1,7 @@
+// Thin wrapper around nodemailer so the rest of the app can call `sendMail`
+// without worrying about transport setup. If no SMTP settings are provided,
+// messages are written to stdout (stream transport) so local development
+// never fails on missing credentials.
 const nodemailer = require('nodemailer');
 const { getBranding } = require('../config/branding');
 
@@ -40,6 +44,8 @@ function createTransporter() {
     return cachedTransporter;
   }
 
+  // No mail settings supplied: use a stream transport that prints the message
+  // to the console so developers can still see email content locally.
   cachedTransporter = nodemailer.createTransport({
     streamTransport: true,
     newline: 'unix',

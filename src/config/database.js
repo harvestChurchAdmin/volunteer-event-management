@@ -1,7 +1,11 @@
+// SQLite bootstrap shared by the entire app. This file owns the connection
+// lifetime, ensures the data folder exists, and exposes `initDatabase()` to
+// apply the schema on first run or after a reset.
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
+// Allow overriding the data location via env for hosting platforms.
 const dbPath = process.env.DB_PATH || path.join(__dirname, '../db/volunteer.db');
 
 // Ensure the directory for the database exists.

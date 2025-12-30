@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const showToast = (message, variant) => {
       if (!toastRoot || !message) return;
       const el = document.createElement('div');
-      el.className = 'toast ' + (variant === 'success' ? 'toast--success' : '');
+      el.className = 'toast ' + (variant === 'success' ? 'toast--success' : (variant === 'danger' ? 'toast--danger' : ''));
       el.setAttribute('role', 'status');
       el.setAttribute('aria-live', 'polite');
       el.innerHTML = `
@@ -26,8 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     // Try data attribute first; fall back to inline success notice text.
     let successMsg = '';
+    let debugMsg = '';
     if (toastData) {
       successMsg = toastData.getAttribute('data-success') || '';
+      debugMsg = toastData.getAttribute('data-debug') || '';
     }
     if (successMsg && successMsg.trim()) {
       showToast(successMsg.trim(), 'success');
@@ -37,6 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = (inline.textContent || '').replace(/\s+/g, ' ').trim();
         if (text) showToast(text, 'success');
       }
+    }
+    if (debugMsg && debugMsg.trim()) {
+      showToast(debugMsg.trim(), 'danger');
     }
   } catch (_) {}
   console.log('DOM fully loaded. Initializing scripts.');
@@ -439,11 +444,46 @@ document.addEventListener('DOMContentLoaded', () => {
     let participants = [];
     const originalPlacement = new Map(); // blockId -> { parent, placeholder }
     const slotAssignments = []; // { slotId, participantKey, participantName, blockId, stationName, startRaw, endRaw, start, end, itemTitle, dishName }
+    const allowInlineToasts = !isManageMode;
 
     function participantKeyFromIndex(idx) { return `idx:${idx}`; }
     function participantKeyFromId(id) { return `id:${id}`; }
 
-    const showToast = () => {}; // suppress on signup/manage pages where inline toasts already exist
+    let toastHost = null;
+    const showToast = (message, variant) => {
+      if (!message) return;
+      if (!toastHost) {
+        toastHost = document.getElementById('toast-root');
+        if (!toastHost) {
+          toastHost = document.createElement('div');
+          toastHost.id = 'toast-root';
+          toastHost.setAttribute('aria-live', 'polite');
+          toastHost.setAttribute('aria-atomic', 'true');
+          toastHost.style.position = 'fixed';
+          toastHost.style.inset = 'auto 0 16px 0';
+          toastHost.style.display = 'flex';
+          toastHost.style.justifyContent = 'center';
+          toastHost.style.pointerEvents = 'none';
+          toastHost.style.zIndex = '2000';
+          toastHost.style.padding = '0 12px';
+          document.body.appendChild(toastHost);
+        }
+      }
+      const el = document.createElement('div');
+      const variantClass = variant === 'danger' ? 'toast--danger' : 'toast--success';
+      el.className = `toast ${variantClass}`;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.innerHTML = `
+        <svg class="toast__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 14.414-4.207-4.207 1.414-1.414L11 13.586l4.793-4.793 1.414 1.414L11 16.414Z"/></svg>
+        <span>${message}</span>
+        <button type="button" class="toast__close" aria-label="Close">×</button>`;
+      toastHost.appendChild(el);
+      const remove = () => { try { el.remove(); } catch (_) {} };
+      const close = el.querySelector('.toast__close');
+      if (close) close.addEventListener('click', remove);
+      setTimeout(remove, 3600);
+    };
 
     function parseParticipantsDataset(raw) {
       if (!raw) return [];
@@ -876,6 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function markConflictState(item, conflicts, hasAnySelectionForBlock, canAssign, selectedHasConflict, assignedForSelected, isSingleParticipant) {
       const button = item.querySelector('.select-slot-btn');
       const note = item.querySelector('[data-role="conflict-note"]');
+      const hint = item.querySelector('[data-role="assign-hint"] .assign-hint-text');
       const baseIsFull = item.getAttribute('data-is-full') === 'true' || item.classList.contains('is-full');
       const allowAssignment = canAssign !== false && (!baseIsFull || assignedForSelected);
 
@@ -907,10 +948,8 @@ document.addEventListener('DOMContentLoaded', () => {
             button.disabled = disableBtn;
             if (assignedForSelected) {
               button.textContent = 'Unassign';
-            } else if (isSingleParticipant) {
-              button.textContent = 'Select';
             } else {
-              button.textContent = hasAnySelectionForBlock ? 'Assign another' : 'Assign';
+              button.textContent = hasAnySelectionForBlock && !isSingleParticipant ? 'Assign another' : 'Assign';
             }
             if (assignedForSelected) button.classList.add('is-selected-assigned');
             else button.classList.remove('is-selected-assigned');
@@ -924,6 +963,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           note.textContent = '';
           note.hidden = true;
+        }
+      }
+      if (hint) {
+        if (isSingleParticipant) {
+          hint.textContent = 'Click “Assign” to add this selection.';
+        } else {
+          hint.textContent = 'Pick a participant, then click “Assign” to add this selection.';
         }
       }
     }
@@ -994,9 +1040,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (assignedForSelected) {
               button.textContent = 'Unassign';
               button.classList.add('is-selected-assigned');
-            } else if (isSingleParticipant) {
-              button.textContent = 'Select';
-              button.classList.remove('is-selected-assigned');
             } else {
               button.textContent = item.classList.contains('selected') ? 'Assign another' : 'Assign';
               button.classList.remove('is-selected-assigned');
@@ -1069,12 +1112,18 @@ document.addEventListener('DOMContentLoaded', () => {
         label: p.name || `Participant ${idx + 1}`
       }));
       document.querySelectorAll('.participant-picker').forEach(sel => {
-        const isSingle = options.length === 1;
-        const blockId = Number(sel.closest('.time-block-item')?.getAttribute('data-block-id'));
-        const assigned = Number.isFinite(blockId)
-          ? slotAssignments.find(a => a.blockId === blockId)
-          : null;
-        const current = sel.dataset.userSet === '1' ? sel.value : (assigned ? assigned.participantKey : '');
+      const isSingle = options.length === 1;
+      const blockId = Number(sel.closest('.time-block-item')?.getAttribute('data-block-id'));
+      const assigned = Number.isFinite(blockId)
+        ? slotAssignments.find(a => a.blockId === blockId)
+        : null;
+        if (!isSingle && !assigned) {
+          sel.dataset.userSet = '';
+        } else if (!isSingle) {
+          sel.dataset.userSet = sel.dataset.userSet === '1' ? '1' : '';
+        }
+        const hasUserChoice = sel.dataset.userSet === '1';
+        const current = hasUserChoice ? sel.value : (assigned ? assigned.participantKey : '');
         sel.innerHTML = '';
         if (!isSingle) {
           const placeholder = document.createElement('option');
@@ -1226,23 +1275,46 @@ document.addEventListener('DOMContentLoaded', () => {
       rebuildPayload();
       updateSignupFormVisibility();
       updateSelectionFabVisibility();
-      showToast(`${participantName || 'Participant'} assigned to ${getSlotLabel(meta)}.`);
+      if (allowInlineToasts) {
+        showToast(`${participantName || 'Participant'} assigned to ${getSlotLabel(meta)}.`);
+      }
     }
 
     function removeAssignment(slotId, participantKey) {
       const idx = slotAssignments.findIndex(a => a.slotId === slotId && a.participantKey === participantKey);
       if (idx >= 0) {
+        const removed = slotAssignments[idx];
         slotAssignments.splice(idx, 1);
+        const blockEl = document.querySelector(`.time-block-item[data-block-id="${removed.blockId}"]`);
+        const pickerEl = blockEl ? blockEl.querySelector('.participant-picker') : null;
+        if (pickerEl) {
+          const multi = pickerEl.options.length > 1;
+          if (multi) {
+            pickerEl.value = '';
+            pickerEl.dataset.userSet = '';
+          }
+        }
         updateConflictingSlots();
         updateCapacityStates();
         renderSelectedList();
         rebuildPayload();
         updateSignupFormVisibility();
         updateSelectionFabVisibility();
+        if (removed && allowInlineToasts) {
+          const meta = {
+            stationName: removed.stationName,
+            startLabel: removed.startLabel,
+            endLabel: removed.endLabel,
+            itemTitle: removed.itemTitle,
+            displayText: removed.displayText
+          };
+          showToast(`${removed.participantName || 'Participant'} unassigned from ${getSlotLabel(meta)}.`, 'danger');
+        }
       }
     }
 
     function renderSelectedList() {
+      renderSaveReview();
       if (!selectedSlotsContainer) return;
       selectedSlotsContainer.innerHTML = '';
       const title = document.createElement('h4');
@@ -1303,6 +1375,16 @@ document.addEventListener('DOMContentLoaded', () => {
             picker.value = assign.participantKey;
             return;
           }
+          if (!isPotluck) {
+            const meta = getSlotMeta(document.querySelector(`.time-block-item[data-block-id="${assign.blockId}"]`));
+            if (meta && participantHasConflict(newKey, meta)) {
+              picker.value = assign.participantKey;
+              if (allowInlineToasts) {
+                showToast(`${getParticipantNameByKey(newKey) || 'Participant'} has an overlapping time. Choose another participant.`, 'danger');
+              }
+              return;
+            }
+          }
           assign.participantKey = newKey;
           assign.participantName = getParticipantNameByKey(newKey);
           assign.slotId = `${assign.blockId}:${newKey}`;
@@ -1310,6 +1392,9 @@ document.addEventListener('DOMContentLoaded', () => {
           rebuildPayload();
           updateConflictingSlots();
           renderSelectedList();
+          if (allowInlineToasts) {
+            showToast(`${assign.participantName || 'Participant'} assigned to ${getSlotLabel(assign)}.`, 'success');
+          }
         });
         li.appendChild(picker);
 
@@ -1351,6 +1436,56 @@ document.addEventListener('DOMContentLoaded', () => {
         badge.textContent = `(${slotAssignments.length})`;
         badge.style.display = '';
       }
+
+      renderSaveReview();
+    }
+
+    function renderSaveReview() {
+      const saveReviewEl = document.getElementById('save-review');
+      if (!saveReviewEl) return;
+      saveReviewEl.innerHTML = '';
+      if (!slotAssignments.length) {
+        const p = document.createElement('p');
+        p.className = 'muted';
+        p.textContent = 'No selections yet. Assign a participant to a time block or item above, then save.';
+        saveReviewEl.appendChild(p);
+        return;
+      }
+
+      const heading = document.createElement('strong');
+      heading.className = 'save-review__label';
+      heading.textContent = 'Review before saving:';
+      saveReviewEl.appendChild(heading);
+
+      const list = document.createElement('ul');
+      list.className = 'save-review__list';
+      slotAssignments.forEach(assign => {
+        const li = document.createElement('li');
+        li.className = 'save-review__item';
+        const topLine = document.createElement('div');
+        topLine.className = 'save-review__title';
+        topLine.textContent = assign.participantName || 'Participant';
+        li.appendChild(topLine);
+
+        const detail = document.createElement('div');
+        detail.className = 'save-review__detail';
+        if (isPotluck) {
+          detail.textContent = `${assign.stationName || 'Item'} — ${assign.itemTitle || ''}${assign.dishName ? ` (${assign.dishName})` : ''}`;
+        } else {
+          detail.textContent = `${assign.stationName || 'Station'} — ${formatSelectedSlotTime(assign)}`;
+        }
+        li.appendChild(detail);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'selected-slot-remove save-review__remove';
+        removeBtn.textContent = 'Remove';
+        removeBtn.addEventListener('click', () => removeAssignment(assign.slotId, assign.participantKey));
+        li.appendChild(removeBtn);
+
+        list.appendChild(li);
+      });
+      saveReviewEl.appendChild(list);
     }
 
     function updateStepVisibility() {
@@ -1694,7 +1829,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showStep1Error(message, focusEl) {
       if (step1ErrorBox) {
-        step1ErrorBox.textContent = message;
+        step1ErrorBox.innerHTML = `<strong>Heads up:</strong> ${message}`;
         step1ErrorBox.style.display = '';
       }
       if (focusEl && typeof focusEl.focus === 'function') {
@@ -1836,18 +1971,46 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
     if (step1ContinueBtn && !isManageMode) {
-      step1ContinueBtn.addEventListener('click', () => {
+      step1ContinueBtn.addEventListener('click', async () => {
         const result = validateStep1();
         if (!result.ok) {
           showStep1Error(result.message, result.focusEl);
           return;
         }
+
+        // Duplicate guard: ping server and send manage link instead of proceeding
+        try {
+          const eventIdInput = document.querySelector('input[name="eventId"]');
+          const csrfInput = document.querySelector('input[name="_csrf"]');
+          const emailInput = document.getElementById('signup-email');
+          const eventId = eventIdInput ? eventIdInput.value : '';
+          const email = emailInput ? emailInput.value : '';
+          const csrf = csrfInput ? csrfInput.value : '';
+          if (eventId && email && csrf) {
+            const resp = await fetch('/manage/check-duplicate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ eventId, email, _csrf: csrf })
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data && data.duplicate) {
+                showStep1Error('It looks like you already have a signup for this event. We emailed your manage link again—please check your inbox (and Spam/Junk) to update your signup.', emailInput);
+                return;
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Duplicate check failed; continuing:', err);
+        }
+
         step1Complete = true;
         updateStepVisibility();
         updateSignupFormVisibility();
         // When entering Step 2 fresh, clear any remembered participant selection so
         // multi-participant pickers start on the placeholder.
         lastSelectedParticipantKey = null;
+        document.querySelectorAll('.participant-picker').forEach(sel => { sel.dataset.userSet = ''; });
         rebuildParticipantPickers();
         updateConflictingSlots();
         const target = selectionStep || document.getElementById('step2Heading') || timeBlockItems[0];

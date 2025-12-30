@@ -168,6 +168,38 @@
     document.addEventListener('keydown', trapHandler);
   }
 
+  function showToast(message, variant) {
+    if (!message) return;
+    let host = document.getElementById('toast-root');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'toast-root';
+      host.setAttribute('aria-live', 'polite');
+      host.setAttribute('aria-atomic', 'true');
+      host.style.position = 'fixed';
+      host.style.inset = 'auto 0 16px 0';
+      host.style.display = 'flex';
+      host.style.justifyContent = 'center';
+      host.style.pointerEvents = 'none';
+      host.style.zIndex = '2000';
+      host.style.padding = '0 12px';
+      document.body.appendChild(host);
+    }
+    const el = document.createElement('div');
+    const variantClass = variant === 'danger' ? 'toast--danger' : 'toast--success';
+    el.className = `toast ${variantClass}`;
+    el.setAttribute('role', 'status');
+    el.innerHTML = `
+      <svg class="toast__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 14.414-4.207-4.207 1.414-1.414L11 13.586l4.793-4.793 1.414 1.414L11 16.414Z"/></svg>
+      <span>${message}</span>
+      <button type="button" class="toast__close" aria-label="Close">×</button>`;
+    host.appendChild(el);
+    const remove = () => { try { el.remove(); } catch (_) {} };
+    const close = el.querySelector('.toast__close');
+    if (close) close.addEventListener('click', remove);
+    setTimeout(remove, 3800);
+  }
+
   /**
    * Hide the modal, tear down focus trapping, and return focus to the opener.
    */
@@ -1331,6 +1363,50 @@
       });
     })();
   });
+
+  // Admin debug logging flag. Set true to enable noisy logs.
+  const ADMIN_DEBUG = false;
+
+  // Surface modal errors (overlap, validation) without leaving the page
+  function reopenModalOnError() {
+    const data = document.getElementById('modal-error-data');
+    if (!data) return;
+    const blockId = data.getAttribute('data-block-id');
+    const message = data.getAttribute('data-message') || 'Unable to add volunteer. Please review and try again.';
+    const debug = data.getAttribute('data-debug') || '';
+    if (!blockId) return;
+    const modal = document.getElementById(`addReservationModal-${blockId}`);
+    if (modal) {
+      // Inline notice inside the modal
+      const body = modal.querySelector('.modal-body') || modal;
+      let inline = body.querySelector('.modal-inline-error');
+      if (!inline) {
+        inline = document.createElement('div');
+        inline.className = 'notice notice--error modal-inline-error';
+        inline.style.marginBottom = '12px';
+        inline.style.position = 'sticky';
+        inline.style.top = '0';
+        inline.style.zIndex = '3';
+        body.insertBefore(inline, body.firstChild);
+      }
+      inline.innerHTML = `<strong>We hit a snag:</strong> ${message}${debug ? `<pre class="small muted" style="white-space:pre-wrap; margin-top:6px;">${debug}</pre>` : ''}`;
+      openModal(modal);
+      if (debug) {
+        try { console.warn('[Admin modal error debug]', JSON.parse(debug)); }
+        catch (_) { console.warn('[Admin modal error debug]', debug); }
+      }
+    } else {
+      showToast(message, 'danger');
+      if (debug) {
+        try { console.warn('[Admin modal error debug]', JSON.parse(debug)); }
+        catch (_) { console.warn('[Admin modal error debug]', debug); }
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', reopenModalOnError);
+  } else {
+    reopenModalOnError();
+  }
 })();
-// Admin debug logging flag. Set true to enable noisy logs.
-const ADMIN_DEBUG = false;

@@ -26,6 +26,10 @@ const app = express();
 
 app.set('trust proxy', 1);
 
+// Drop obvious WordPress/CMS probes early to avoid session creation and noisy logs.
+const wordpressProbePattern = /(\/|^)(?:wp-admin|wp-content|wp-includes|wp-login\.php|xmlrpc\.php|wlwmanifest\.xml)/i;
+const phpProbePattern = /\.php(\?|$)/i;
+
 // Serve a real favicon if present in the static folder; otherwise return 204.
 app.get('/favicon.ico', (req, res) => {
     const faviconPath = path.join(__dirname, 'public', 'favicon.ico');
@@ -59,6 +63,14 @@ app.use(helmet({
         },
     },
 }));
+
+app.use((req, res, next) => {
+    const url = (req.originalUrl || '').toLowerCase();
+    if (wordpressProbePattern.test(url) || phpProbePattern.test(url)) {
+        return res.status(410).type('text/plain').send('Gone');
+    }
+    next();
+});
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));

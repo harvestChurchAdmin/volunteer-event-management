@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# Keep crawlers away from admin/auth routes
+Disallow: /admin
+Disallow: /auth
+Disallow: /login
+Disallow: /logout
+Disallow: /manage
+
+# Prevent pointless CMS probing that our app does not serve
+Disallow: /wp-admin
+Disallow: /wp-includes
+Disallow: /wp-content
+Disallow: /xmlrpc.php
+Disallow: /wlwmanifest.xml

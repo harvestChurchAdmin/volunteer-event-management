@@ -54,3 +54,53 @@ CREATE TABLE IF NOT EXISTS reservations (
 );
 CREATE INDEX IF NOT EXISTS idx_reservations_volunteer_id ON reservations(volunteer_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_block_id ON reservations(block_id);
+
+-- Group registration tables (multi-participant)
+CREATE TABLE IF NOT EXISTS registrations (
+    registration_id INTEGER PRIMARY KEY,
+    event_id INTEGER NOT NULL,
+    registrant_name TEXT NOT NULL,
+    registrant_email TEXT NOT NULL,
+    registrant_phone TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    manage_token_hash TEXT,
+    manage_token_expires_at TEXT,
+    email_opt_in INTEGER NOT NULL DEFAULT 1,
+    email_opted_out_at TEXT,
+    email_opt_out_reason TEXT,
+    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_registrations_event ON registrations(event_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_token ON registrations(manage_token_hash);
+
+CREATE TABLE IF NOT EXISTS participants (
+    participant_id INTEGER PRIMARY KEY,
+    registration_id INTEGER NOT NULL,
+    participant_name TEXT NOT NULL,
+    FOREIGN KEY (registration_id) REFERENCES registrations(registration_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_participants_registration ON participants(registration_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_participants_reg_name ON participants(registration_id, participant_name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS schedule_assignments (
+    assignment_id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL,
+    time_block_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (participant_id) REFERENCES participants(participant_id) ON DELETE CASCADE,
+    FOREIGN KEY (time_block_id) REFERENCES time_blocks(block_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_schedule_assignments_unique ON schedule_assignments(participant_id, time_block_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_assignments_block ON schedule_assignments(time_block_id);
+
+CREATE TABLE IF NOT EXISTS potluck_assignments (
+    assignment_id INTEGER PRIMARY KEY,
+    participant_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    dish_name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (participant_id) REFERENCES participants(participant_id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES time_blocks(block_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_potluck_assignments_unique ON potluck_assignments(participant_id, item_id);
+CREATE INDEX IF NOT EXISTS idx_potluck_assignments_item ON potluck_assignments(item_id);

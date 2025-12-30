@@ -1,5 +1,6 @@
 // src/controllers/adminController.js
 const adminService = require('../services/adminService');
+const publicService = require('../services/publicService');
 const { validationResult } = require('express-validator');
 
 /**
@@ -63,7 +64,8 @@ exports.showEventDetail = (req, res, next) => {
       helpers,
       messages: req.flash(),
       layoutVariant: 'admin',
-      shareUrl
+      shareUrl,
+      query: req.query
     });
   } catch (e) { next(e); }
 };
@@ -273,6 +275,9 @@ exports.exportEventCsv = (req, res, next) => {
           'Volunteer Name',
           'Volunteer Email',
           'Volunteer Phone',
+          'Registrant Name',
+          'Registrant Email',
+          'Registrant Phone',
           'Reservation Date',
           'Dish Name'
         ]
@@ -288,6 +293,9 @@ exports.exportEventCsv = (req, res, next) => {
           'Volunteer Name',
           'Volunteer Email',
           'Volunteer Phone',
+          'Registrant Name',
+          'Registrant Email',
+          'Registrant Phone',
           'Reservation Date',
           'Dish Name'
         ];
@@ -317,6 +325,9 @@ exports.exportEventCsv = (req, res, next) => {
         r.volunteer_name,
         r.volunteer_email,
         r.volunteer_phone,
+        r.registrant_name,
+        r.registrant_email,
+        r.registrant_phone,
         r.reservation_date,
         r.reservation_note || ''
       ];
@@ -397,6 +408,9 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
       volunteer_name: ['volunteer_name', 'Volunteer Name'],
       volunteer_email: ['volunteer_email', 'Volunteer Email'],
       volunteer_phone: ['volunteer_phone', 'Volunteer Phone'],
+      registrant_name: ['registrant_name', 'Registrant Name'],
+      registrant_email: ['registrant_email', 'Registrant Email'],
+      registrant_phone: ['registrant_phone', 'Registrant Phone'],
       dish_name: ['reservation_note', 'Dish Name']
     };
 
@@ -405,6 +419,7 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
           'event_name', 'event_start', 'event_end',
           'station_name', 'item_title',
           'volunteer_name', 'volunteer_email', 'volunteer_phone',
+          'registrant_name', 'registrant_email', 'registrant_phone',
           'dish_name',
           'reservation_date'
         ]
@@ -412,6 +427,7 @@ exports.exportEventCsvAdvanced = (req, res, next) => {
           'event_name', 'event_start', 'event_end',
           'station_name', 'block_start', 'block_end',
           'volunteer_name', 'volunteer_email', 'volunteer_phone',
+          'registrant_name', 'registrant_email', 'registrant_phone',
           'reservation_date'
         ];
 
@@ -610,13 +626,33 @@ exports.updateTimeBlock = (req, res, next) => {
  * Add a volunteer to a time block directly from the admin screen.
  */
 exports.addReservation = (req, res, next) => {
+  let blockIdParam = null;
+  let eventIdSafe = '';
   try {
-    const { blockId } = req.params;
-    const { eventId, name, email, phone, dish_note } = req.body;
-    adminService.addReservationToBlock(blockId, { name, email, phone, dish_note });
+    blockIdParam = req.params.blockId;
+    const { eventId, name, email, phone, dish_note, is_potluck, registrant_name, participant_name } = req.body;
+    eventIdSafe = eventId || '';
+    adminService.addReservationToBlock(
+      blockIdParam,
+      { name, email, phone, dish_note, registrant_name, participant_name },
+      eventId,
+      String(is_potluck) === 'true'
+    );
     req.flash('success', 'Volunteer added to time block.');
     res.redirect(`/admin/event/${eventId}`);
   } catch (e) {
+    if (e.status === 409 || e.status === 400) {
+      const modalBlock = blockIdParam || req.body.blockId || req.params.blockId;
+      const msg = encodeURIComponent(e.message || 'Unable to add volunteer.');
+      if (e.debug) {
+        try { req.flash('debug', JSON.stringify(e.debug, null, 2)); } catch (_) {}
+        try { console.error('[admin:addReservation debug]', JSON.stringify(e.debug)); } catch (_) { console.error('[admin:addReservation debug]', e.debug); }
+      }
+      const suffixBlock = modalBlock ? `modalBlock=${encodeURIComponent(modalBlock)}` : '';
+      const suffixMsg = `modalError=${msg}`;
+      const query = [suffixBlock, suffixMsg].filter(Boolean).join('&');
+      return res.redirect(`/admin/event/${eventIdSafe}${query ? '?' + query : ''}`);
+    }
     next(e);
   }
 };
@@ -726,6 +762,35 @@ exports.copyEvent = (req, res, next) => {
     const { eventId } = req.params;
     const result = adminService.copyEvent(eventId);
     req.flash('success', 'Event copied. New event is in Draft.');
+    res.redirect('/admin/dashboard');
+  } catch (e) { next(e); }
+};
+
+// Temporary maintenance endpoint: merge duplicate registrations per event
+exports.mergeAllDuplicates = (req, res, next) => {
+  try {
+    const events = adminService.getDashboardData();
+    let mergedTotal = 0;
+    const conflicts = [];
+    events.forEach(evt => {
+      try {
+        const result = publicService.mergeAllDuplicatesForEvent(evt.event_id);
+        if (result && result.merged) mergedTotal += result.merged;
+        if (result && Array.isArray(result.conflicts) && result.conflicts.length) {
+          result.conflicts.forEach(c => conflicts.push({ eventId: evt.event_id, email: c.email, error: c.error }));
+        }
+      } catch (err) {
+        conflicts.push({ eventId: evt.event_id, email: 'unknown', error: err && err.message ? err.message : String(err) });
+        console.error('Merge duplicates failed for event', evt.event_id, err);
+      }
+    });
+    const msg = conflicts.length
+      ? `Merged duplicates across ${events.length} events. Merge operations: ${mergedTotal}. Conflicts: ${conflicts.length} (see debug).`
+      : `Merged duplicates across ${events.length} events. Merge operations: ${mergedTotal}.`;
+    req.flash('success', msg);
+    if (conflicts.length) {
+      try { req.flash('debug', JSON.stringify({ conflicts }, null, 2)); } catch (_) {}
+    }
     res.redirect('/admin/dashboard');
   } catch (e) { next(e); }
 };

@@ -130,6 +130,8 @@ function getEventDetailsForAdmin(eventId) {
       name: r.volunteer_name,
       email: r.volunteer_email,
       phone: r.volunteer_phone,
+      registrant_name: r.registrant_name,
+      registrant_email: r.registrant_email,
       reservation_date: r.reservation_date,
       reservation_note: r.reservation_note || ''
     });
@@ -237,8 +239,11 @@ function getEventRosterForExport(eventId, opts = {}) {
           volunteer_id: res.volunteer_id,
           volunteer_name: res.name,
           volunteer_email: res.email,
-          volunteer_phone: res.phone || ''
-          , reservation_note: res.reservation_note || res.note || ''
+          volunteer_phone: res.phone || '',
+          registrant_name: res.registrant_name || res.name,
+          registrant_email: res.registrant_email || res.email,
+          registrant_phone: res.phone || '',
+          reservation_note: res.reservation_note || res.note || ''
         });
       });
     });
@@ -618,26 +623,262 @@ function updateTimeBlock(blockId, data) {
   return dal.admin.updateTimeBlock(blockId, patch);
 }
 
+function slotsOverlap(a, b) {
+  return a.start < b.end && b.start < a.end;
+}
+
+function getBlockRanges(blockIds) {
+  const info = dal.public.getBlocksInfo(blockIds);
+  const map = new Map();
+  info.forEach(b => {
+    const start = new Date(String(b.start_time).replace(' ', 'T')).getTime();
+    const end = new Date(String(b.end_time).replace(' ', 'T')).getTime();
+    map.set(Number(b.block_id), { start, end, signup_mode: String(b.signup_mode || '').toLowerCase() });
+  });
+  return map;
+}
+
+function assertNoOverlapForParticipant(participantId, newBlockId, detail) {
+  const assignments = Array.isArray(detail && detail.scheduleAssignments) ? detail.scheduleAssignments : [];
+  const existingForParticipant = assignments.filter(a => Number(a.participant_id) === Number(participantId));
+  if (!existingForParticipant.length) return;
+
+  const blockIds = Array.from(new Set([
+    ...existingForParticipant.map(a => Number(a.time_block_id)),
+    Number(newBlockId)
+  ].filter(Number.isFinite)));
+
+  const blockMap = getBlockRanges(blockIds);
+  const newRange = blockMap.get(Number(newBlockId));
+  if (!newRange) return;
+  // Only enforce for schedule events
+  if ((newRange.signup_mode || 'schedule') !== 'schedule') return;
+
+  for (const a of existingForParticipant) {
+    const range = blockMap.get(Number(a.time_block_id));
+    if (!range || Number(a.time_block_id) === Number(newBlockId)) continue;
+    if (slotsOverlap(range, newRange)) {
+      throw createError(409, 'This participant is already assigned to an overlapping time block.');
+    }
+  }
+}
+
 /**
  * Add a reservation directly to a time block on behalf of a volunteer. The DAL
  * handles duplicate detection so we simply forward the normalized payload.
  */
-function addReservationToBlock(blockId, volunteer) {
+function addReservationToBlock(blockId, volunteer, eventId, isPotluck) {
+  const eventIdNum = Number(eventId);
   if (!blockId) throw createError(400, 'Time block ID required.');
+  if (!Number.isFinite(eventIdNum)) throw createError(400, 'Event ID required.');
   if (!volunteer || !volunteer.name || !volunteer.email) {
     throw createError(400, 'Volunteer name and email are required.');
   }
-  const dishNote = (volunteer.dish_note || volunteer.note || '').toString().trim();
-  const notes = dishNote ? { [blockId]: dishNote } : undefined;
-  const result = dal.public.reserveVolunteerSlots({
-    name: volunteer.name,
-    email: volunteer.email,
-    phone: volunteer.phone || ''
-  }, [blockId], notes);
-  if (!result || !result.count) {
-    throw createError(409, 'Volunteer is already registered for this time block.');
+  const dishNoteRaw = (volunteer.dish_note || volunteer.note || '').toString().trim();
+  const registrantEmail = (volunteer.registrant_email || volunteer.email || '').trim();
+  const registrantPhone = (volunteer.registrant_phone || volunteer.phone || '').trim();
+  const blockIdNum = Number(blockId);
+  const participantNameRaw = (volunteer.participant_name || volunteer.name || '').trim();
+  const normalizedName = participantNameRaw.length ? participantNameRaw : volunteer.name.trim();
+
+  // If this email already has a registration for the event, reuse it so the
+  // manage link stays consistent and the person can manage all assignments.
+  const existingReg = registrantEmail
+    ? dal.public.findRegistrationByEmail(eventIdNum, registrantEmail)
+    : null;
+
+  if (existingReg) {
+    const regDetail = dal.public.getRegistrationDetailWithAssignments(existingReg.registration_id);
+    if (!regDetail) throw createError(404, 'Registration not found.');
+
+    const participants = Array.isArray(regDetail.participants) ? regDetail.participants : [];
+    const schedAssignments = Array.isArray(regDetail.scheduleAssignments)
+      ? regDetail.scheduleAssignments.map(a => ({
+        participantId: a.participant_id,
+        blockId: Number(a.time_block_id)
+      }))
+      : [];
+    const potAssignments = Array.isArray(regDetail.potluckAssignments)
+      ? regDetail.potluckAssignments.map(a => ({
+        participantId: a.participant_id,
+        itemId: Number(a.item_id),
+        dishName: a.dish_name
+      }))
+      : [];
+
+    const existingParticipant = participants.find(
+      p => p && typeof p.participant_name === 'string'
+        && p.participant_name.trim().toLowerCase() === normalizedName.toLowerCase()
+    );
+    let participantId = existingParticipant ? existingParticipant.participant_id : null;
+    let createdParticipantId = null;
+    if (!participantId) {
+      const addRes = dal.public.addParticipant(existingReg.registration_id, normalizedName);
+      participantId = addRes && addRes.participant_id;
+      createdParticipantId = participantId;
+    }
+
+    const alreadySched = schedAssignments.some(
+      a => a.participantId === participantId && Number(a.blockId) === blockIdNum
+    );
+    const alreadyPot = potAssignments.some(
+      a => a.participantId === participantId && Number(a.itemId) === blockIdNum
+    );
+
+    if (isPotluck) {
+      if (!alreadyPot) {
+        potAssignments.push({ participantId, itemId: blockIdNum, dishName: dishNoteRaw });
+      }
+    } else if (!alreadySched) {
+      assertNoOverlapForParticipant(participantId, blockIdNum, regDetail);
+      schedAssignments.push({ participantId, blockId: blockIdNum });
+    }
+
+    try {
+      dal.public.replaceRegistrationAssignments(
+        existingReg.registration_id,
+        eventIdNum,
+        schedAssignments,
+        potAssignments,
+        { debugCapacity: true }
+      );
+    } catch (err) {
+      // Clean up the participant we just created if the save failed.
+      if (createdParticipantId) {
+        try { dal.public.deleteParticipant(existingReg.registration_id, createdParticipantId, true); } catch (_) {}
+      }
+      if (err && err.debug) {
+        try { console.error('[admin:addReservation debug rows]', JSON.stringify(err.debug, null, 2)); } catch (_) {
+          console.error('[admin:addReservation debug rows]', err.debug);
+        }
+        const schedRows = err.debug.rawSchedRows || err.debug.schedRows;
+        if (Array.isArray(schedRows)) {
+          schedRows.forEach(row => {
+            try {
+              console.error('[admin:addReservation schedRow]', JSON.stringify(row));
+            } catch (_) {
+              console.error('[admin:addReservation schedRow]', row);
+            }
+          });
+        }
+        if (Array.isArray(err.debug.rawSchedCounts)) {
+          console.error('[admin:addReservation schedCounts]', JSON.stringify(err.debug.rawSchedCounts));
+        }
+        try {
+          const liveRows = dal.public.getAssignmentsForBlock(blockIdNum || blockId);
+          console.error('[admin:addReservation liveRows]', JSON.stringify(liveRows, null, 2));
+        } catch (_) {}
+      }
+      throw err;
+    }
+
+    // Optionally refresh registrant contact if supplied (do not override name unless provided).
+    if (volunteer.registrant_name || registrantPhone) {
+      dal.admin.updateParticipantContact(participantId, normalizedName, {
+        name: volunteer.registrant_name || undefined,
+        email: registrantEmail,
+        phone: registrantPhone || undefined
+      });
+    }
+
+    return { registrationId: existingReg.registration_id, participantId };
+  }
+
+  const participantNames = [normalizedName];
+  const sched = isPotluck ? [] : [{ blockId: blockIdNum, participantIndex: 0 }];
+  const pot = isPotluck ? [{ itemId: blockIdNum, dishName: dishNoteRaw, participantIndex: 0 }] : [];
+
+  // Use group-registration aware path so admin adds stay consistent.
+  const result = dal.public.createRegistrationWithAssignments(
+    eventIdNum,
+    {
+      name: volunteer.registrant_name || volunteer.name || normalizedName,
+      email: registrantEmail,
+      phone: registrantPhone
+    },
+    participantNames,
+    sched,
+    pot
+  );
+  if (!result) {
+    throw createError(409, 'Unable to add volunteer to this time block.');
+  }
+  // Ensure any prior registrations for this email are merged into one so the
+  // manage link aggregates all assignments.
+  try {
+    mergeRegistrationsForEmail(eventIdNum, registrantEmail, result.registrationId);
+  } catch (_) {
+    // do not block success; merging is best-effort
   }
   return result;
+}
+
+/**
+ * Ensure only one registration exists for an event/email by merging any
+ * duplicates into the primary registration. Copies assignments and participants,
+ * then deletes the older registrations to avoid double-counting capacity.
+ */
+function mergeRegistrationsForEmail(eventId, email, primaryIdHint) {
+  if (!email) return;
+  const regs = dal.public.findRegistrationsByEmail(eventId, email) || [];
+  if (!regs.length) return;
+  const primary = (primaryIdHint && regs.find(r => r.registration_id === primaryIdHint)) || regs[0];
+  const extras = regs.filter(r => r.registration_id !== primary.registration_id);
+  if (!extras.length) return;
+
+  // Build participant map for primary
+  const primaryDetail = dal.public.getRegistrationDetailWithAssignments(primary.registration_id);
+  const nameToParticipant = new Map();
+  (primaryDetail.participants || []).forEach(p => {
+    nameToParticipant.set(String(p.participant_name).trim().toLowerCase(), p.participant_id);
+  });
+
+  const schedAssignments = (primaryDetail.scheduleAssignments || []).map(a => ({
+    participantId: a.participant_id,
+    blockId: Number(a.time_block_id)
+  }));
+  const potAssignments = (primaryDetail.potluckAssignments || []).map(a => ({
+    participantId: a.participant_id,
+    itemId: Number(a.item_id),
+    dishName: a.dish_name
+  }));
+
+  extras.forEach(reg => {
+    const detail = dal.public.getRegistrationDetailWithAssignments(reg.registration_id);
+    const participantIdMap = new Map();
+    (detail.participants || []).forEach(p => {
+      const key = String(p.participant_name).trim().toLowerCase();
+      let targetId = nameToParticipant.get(key);
+      if (!targetId) {
+        const addRes = dal.public.addParticipant(primary.registration_id, p.participant_name);
+        targetId = addRes && addRes.participant_id;
+        nameToParticipant.set(key, targetId);
+      }
+      participantIdMap.set(p.participant_id, targetId);
+    });
+
+    (detail.scheduleAssignments || []).forEach(a => {
+      const targetPid = participantIdMap.get(a.participant_id);
+      if (targetPid) {
+        const already = schedAssignments.some(sa => sa.participantId === targetPid && Number(sa.blockId) === Number(a.time_block_id));
+        if (!already) schedAssignments.push({ participantId: targetPid, blockId: Number(a.time_block_id) });
+      }
+    });
+    (detail.potluckAssignments || []).forEach(a => {
+      const targetPid = participantIdMap.get(a.participant_id);
+      if (targetPid) {
+        const already = potAssignments.some(pa => pa.participantId === targetPid && Number(pa.itemId) === Number(a.item_id));
+        if (!already) potAssignments.push({ participantId: targetPid, itemId: Number(a.item_id), dishName: a.dish_name });
+      }
+    });
+  });
+
+  dal.public.replaceRegistrationAssignments(primary.registration_id, eventId, schedAssignments, potAssignments);
+
+  // Clean up duplicates after merging so capacity counts stay correct.
+  extras.forEach(reg => {
+    try { dal.public.deleteRegistrationCascade(reg.registration_id); } catch (_) {}
+  });
 }
 
 /**
@@ -667,16 +908,17 @@ function updateReservation(reservationId, payload) {
 
   if (!name || !email) throw createError(400, 'Volunteer name and email are required.');
 
-  try {
-    dal.admin.updateVolunteer(reservation.volunteer_id, name, email, phone);
-  } catch (err) {
-    if (err && err.message && /UNIQUE/i.test(err.message)) {
-      throw createError(409, 'Another volunteer already uses that email address.');
-    }
-    throw err;
-  }
+  // Update participant name; only update registrant contact if explicitly provided (not the case here).
+  dal.admin.updateParticipantContact(reservation.volunteer_id, name, {
+    email: email !== reservation.volunteer_email ? email : undefined,
+    phone: phone !== reservation.volunteer_phone ? phone : undefined
+  });
 
   if (payload.block_id && Number(payload.block_id) !== reservation.block_id) {
+    // Overlap guard for schedule mode
+    const detail = dal.public.getRegistrationDetailWithAssignments(reservation.registration_id);
+    const newBlockId = Number(payload.block_id);
+    assertNoOverlapForParticipant(reservation.volunteer_id, newBlockId, detail);
     dal.admin.moveReservation(reservationId, Number(payload.block_id));
   }
 

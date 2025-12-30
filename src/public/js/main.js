@@ -71,6 +71,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return fallbackCopyText(text);
   }
 
+  // Optional debug outlines (?debug=containers)
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('debug') === 'containers') {
+      document.documentElement.classList.add('debug-containers');
+    }
+  } catch (_) {}
+
   // Share link buttons (admin + public pages) -------------------------------
   (function initShareLinkCopyButtons() {
     const buttons = document.querySelectorAll('[data-copy-share-link]');
@@ -396,6 +404,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const timeViewList = document.getElementById('slots-by-time-list');
     const selectionFab = document.getElementById('selection-fab');
     const selectionFabButton = selectionFab ? selectionFab.querySelector('button') : null;
+    const partySizeInput = document.getElementById('party-size');
+    const participantListEl = document.getElementById('participant-list');
+    const manageDataEl = document.getElementById('manage-data');
+    const registrantRadioEls = Array.from(document.querySelectorAll('input[name="registrant_participating"]'));
+    const registrationPayloadInput = document.getElementById('registration-payload');
+    const step1ContinueBtn = document.getElementById('step1-continue');
+    const selectionStep = document.getElementById('selection-step');
+    const reviewStep = document.getElementById('review-step');
+    const step1ErrorBox = document.getElementById('step1-errors');
+    let initialPayload = {};
+    let lastSelectedParticipantKey = null;
+    try {
+      initialPayload = registrationPayloadInput && registrationPayloadInput.value
+        ? JSON.parse(registrationPayloadInput.value)
+        : {};
+    } catch (err) {
+      initialPayload = {};
+    }
+    let step1Complete = false;
+    if (isManageMode) {
+      step1Complete = true;
+    } else if (initialPayload && (Array.isArray(initialPayload.participants) ? initialPayload.participants.length > 0 : false)) {
+      step1Complete = true;
+    }
 
     const DEBUG = false;
     if (!timeBlockItems.length || !signupFormContainer || !signupForm) {
@@ -403,21 +435,62 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (DEBUG) console.debug('[VolunteerUI] Found', timeBlockItems.length, 'time block entries.');
-    timeBlockItems.slice(0, 5).forEach((el, i) => {
-      if (!DEBUG) return;
-      console.debug(`[VolunteerUI] Item[${i}] dataset:`, {
-        blockId: el.getAttribute('data-block-id'),
-        start: el.getAttribute('data-start-time'),
-        end: el.getAttribute('data-end-time'),
-        isFull: el.getAttribute('data-is-full'),
-        station: el.getAttribute('data-station-name')
-      });
-    });
-
-    // State: selected opportunities -> we store metadata needed for conflicts and rendering.
-    let selectedSlots = []; // { id, displayText, start, end, stationId, stationName, startLabel, endLabel, startRaw, endRaw }
+    // --- Participant state ---
+    let participants = [];
     const originalPlacement = new Map(); // blockId -> { parent, placeholder }
+    const slotAssignments = []; // { slotId, participantKey, participantName, blockId, stationName, startRaw, endRaw, start, end, itemTitle, dishName }
+
+    function participantKeyFromIndex(idx) { return `idx:${idx}`; }
+    function participantKeyFromId(id) { return `id:${id}`; }
+
+    const showToast = () => {}; // suppress on signup/manage pages where inline toasts already exist
+
+    function parseParticipantsDataset(raw) {
+      if (!raw) return [];
+      try {
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr.map(p => ({ id: p.participant_id || p.id, name: String(p.participant_name || p.name || p).trim() })).filter(p => p.name);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function initParticipants() {
+      if (isManageMode) {
+        const data = manageDataEl ? parseParticipantsDataset(manageDataEl.getAttribute('data-participants')) : [];
+        return data.length ? data : [];
+      }
+      // Signup page
+      const payloadParticipants = Array.isArray(initialPayload.participants)
+        ? initialPayload.participants.map(p => ({ name: String((p && (p.name || p.participant_name)) || p || '').trim() })).filter(p => p.name || String(p.name) === '')
+        : [];
+      const preload = participantListEl ? parseParticipantsDataset(participantListEl.getAttribute('data-participants')) : [];
+      const registrantNameInput = document.getElementById('signup-name');
+      const registrantName = registrantNameInput ? String(registrantNameInput.value || '').trim() : '';
+      const registrantParticipating = registrantRadioEls.some(r => r.checked && r.value === 'yes');
+      let count = Number(partySizeInput && partySizeInput.value);
+      if (!Number.isFinite(count) || count < 1) count = payloadParticipants.length || preload.length || 1;
+      if (payloadParticipants.length > count) count = payloadParticipants.length;
+      if (partySizeInput && Number(partySizeInput.value) !== count) {
+        partySizeInput.value = count;
+      }
+      const base = payloadParticipants.length ? payloadParticipants.slice(0, count) : (preload.length ? preload.slice(0, count) : []);
+      while (base.length < count) base.push({ name: '' });
+      if (registrantParticipating) {
+        if (!base.length) base.push({ name: registrantName || 'You' });
+        else base[0].name = registrantName || 'You';
+      } else if (!registrantParticipating && base.length) {
+        const defaultNames = ['you', 'yourself', 'registrant'];
+        const first = String(base[0].name || '').trim();
+        if (!first || defaultNames.includes(first.toLowerCase()) || (registrantName && first.toLowerCase() === registrantName.toLowerCase())) {
+          base[0].name = '';
+        }
+      }
+      return base;
+    }
+
+    participants = initParticipants();
 
     function isInViewport(el) {
       if (!el) return false;
@@ -429,8 +502,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateSelectionFabVisibility() {
       if (!selectionFab) return;
-      const hasSelections = selectedSlots.length > 0;
-      const shouldEnable = isManageMode || hasSelections;
+      const hasSelections = slotAssignments.length > 0;
+      const shouldEnable = isManageMode || (step1Complete && hasSelections);
       if (!shouldEnable) {
         try {
           if (selectionFab.contains(document.activeElement) && document.activeElement && typeof document.activeElement.blur === 'function') {
@@ -480,7 +553,6 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
 
         if (isPotluck) {
-          // Potluck: scroll to the first dish name field in Step 2 and focus it.
           const firstDish = document.querySelector('#selected-slots-container input[id^="dish-note-"]');
           let scrollTarget = firstDish;
           if (firstDish) {
@@ -510,8 +582,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }, 420);
         } else {
-          // Standard volunteer signup: scroll to Step 2 review panel, but do not auto-focus
-          // any field so the keyboard does not pop up and hide selections on mobile.
           const step2Heading = document.getElementById('step2Heading');
           const scrollTarget = step2Heading || selectedPanel || signupFormContainer;
 
@@ -525,13 +595,116 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
-    if (selectionFab) {
-      selectionFab.setAttribute('aria-hidden', 'true');
-      const onScroll = () => updateSelectionFabVisibility();
-      window.addEventListener('scroll', onScroll, { passive: true });
-      window.addEventListener('resize', onScroll);
-      updateSelectionFabVisibility();
-    }
+  if (selectionFab) {
+    selectionFab.setAttribute('aria-hidden', 'true');
+    const onScroll = () => updateSelectionFabVisibility();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    updateSelectionFabVisibility();
+  }
+
+  // Manage page: confirm participant delete and optionally remove assignments
+  if (isManageMode) {
+    const assignmentsMetaEl = manageDataEl;
+    let participantAssignments = new Map();
+    try {
+      const data = assignmentsMetaEl ? JSON.parse(assignmentsMetaEl.getAttribute('data-assignments') || '{}') : {};
+      participantAssignments = new Map(
+        (data.participants || []).map(p => ({
+          id: Number(p.participant_id),
+          name: p.participant_name,
+          sched: Array.isArray(p.schedule) ? p.schedule : [],
+          pot: Array.isArray(p.potluck) ? p.potluck : []
+        })).map(p => [p.id, p])
+      );
+    } catch (_) {}
+
+    document.querySelectorAll('.manage-delete-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const form = btn.closest('form');
+        if (!form) return;
+        const pid = Number(btn.getAttribute('data-participant-id'));
+        const pName = btn.getAttribute('data-participant-name') || 'this participant';
+        const counts = participantAssignments.get(pid) || { sched: [], pot: [], name: pName };
+        // Include any pending (unsaved) assignments in the UI
+        const pendingSched = isPotluck ? [] : slotAssignments.filter(a => a.participantKey === participantKeyFromId(pid));
+        const pendingPot = isPotluck ? slotAssignments.filter(a => a.participantKey === participantKeyFromId(pid)) : [];
+        const schedTotal = (counts.sched ? counts.sched.length : 0) + pendingSched.length;
+        const potTotal = (counts.pot ? counts.pot.length : 0) + pendingPot.length;
+        const total = schedTotal + potTotal;
+        function labelForSchedule(item) {
+          const station = item.station_name || item.station || '';
+          const start = item.start_label || item.start_time || '';
+          const end = item.end_label || item.end_time || '';
+          const time = start && end ? `${start} – ${end}` : (start || end);
+          return [station, time].filter(Boolean).join(' — ') || station || time || 'Slot';
+        }
+        function labelForPot(item) {
+          const station = item.station_name || item.station || '';
+          const title = item.item_title || item.title || '';
+          return [station, title].filter(Boolean).join(' — ') || station || title || 'Item';
+        }
+        const pendingLabels = pendingSched.map(a => getSlotLabel(a)).concat(pendingPot.map(a => getSlotLabel(a)));
+        const savedLabels = [
+          ...(counts.sched || []).map(labelForSchedule),
+          ...(counts.pot || []).map(labelForPot)
+        ].filter(Boolean);
+        const labels = [...savedLabels, ...pendingLabels];
+
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.setAttribute('aria-hidden', 'false');
+        modal.innerHTML = `
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Delete ${pName}</h3>
+              <button type="button" class="close-btn" data-modal-cancel aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+              ${total === 0 ? '<p>This participant has no assignments.</p>' : `<p>This will remove ${total} assignment${total === 1 ? '' : 's'} (including unsaved changes).</p>`}
+              ${schedTotal > 0 ? `<p class="muted">Schedule: ${schedTotal} slot${schedTotal === 1 ? '' : 's'}</p>` : ''}
+              ${potTotal > 0 ? `<p class="muted">Items: ${potTotal} item${potTotal === 1 ? '' : 's'}</p>` : ''}
+              ${labels.length ? `<ul class="modal-list">${labels.map(l => `<li>${l}</li>`).join('')}</ul>` : ''}
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-ghost" data-modal-cancel>Cancel</button>
+              <button type="button" class="btn btn-danger" data-modal-confirm>Delete</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        const closeModal = () => { try { modal.remove(); } catch (_) {} };
+        modal.querySelectorAll('[data-modal-cancel]').forEach(el => el.addEventListener('click', closeModal));
+        modal.addEventListener('click', (evt) => {
+          if (evt.target === modal) closeModal();
+        });
+        modal.querySelector('[data-modal-confirm]')?.addEventListener('click', () => {
+          // Drop any pending assignments for this participant before submit
+          for (let i = slotAssignments.length - 1; i >= 0; i -= 1) {
+            if (slotAssignments[i].participantKey === participantKeyFromId(pid)) {
+              slotAssignments.splice(i, 1);
+            }
+          }
+          updateConflictingSlots();
+          updateCapacityStates();
+          renderSelectedList();
+          rebuildPayload();
+          let input = form.querySelector('input[name="removeAssignments"]');
+          if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'removeAssignments';
+            form.appendChild(input);
+          }
+          input.value = '1';
+          closeModal();
+          form.submit();
+        });
+      });
+    });
+  }
 
     timeBlockItems.forEach(item => {
       if (typeof item.dataset.originalTabindex === 'undefined') {
@@ -560,6 +733,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const startRaw = item.getAttribute('data-start-time');
       const endRaw = item.getAttribute('data-end-time');
       const itemTitle = item.getAttribute('data-item-title') || '';
+      const capacity = Number(item.getAttribute('data-capacity'));
+      const reserved = Number(item.getAttribute('data-reserved') || '0');
       if (typeof item.dataset.startTs === 'undefined') {
         item.dataset.startTs = String(computeTimestamp(startRaw));
       }
@@ -588,7 +763,9 @@ document.addEventListener('DOMContentLoaded', () => {
         startLabel,
         endLabel,
         startRaw,
-        endRaw
+        endRaw,
+        capacity: Number.isFinite(capacity) ? capacity : null,
+        reserved: Number.isFinite(reserved) ? reserved : 0
       };
     }
 
@@ -613,13 +790,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return clean;
     }
 
-    function formatSlotForMessage(slot) {
-      if (!slot) return '(unknown)';
-      if (slot.displayText) return slot.displayText;
-      const parts = [];
-      if (slot.stationName) parts.push(slot.stationName);
-      return parts.length ? parts.join(' — ') : '(unknown)';
-    }
     function splitDateAndTime(label) {
       if (!label) {
         return { date: '', time: '' };
@@ -680,7 +850,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return hasStart ? startLabel : endLabel;
     }
 
-
     function slotsOverlap(a, b) {
       if (!a || !b) return false;
       if (!Number.isFinite(a.start) || !Number.isFinite(a.end) || !Number.isFinite(b.start) || !Number.isFinite(b.end)) {
@@ -689,70 +858,180 @@ document.addEventListener('DOMContentLoaded', () => {
       return a.start < b.end && b.start < a.end;
     }
 
-    function markConflictState(item, conflicts) {
+    function getParticipantNameByKey(key) {
+      if (!key) return '';
+      if (key.startsWith('id:')) {
+        const id = Number(key.slice(3));
+        const found = participants.find(p => Number(p.id) === id);
+        return found ? found.name : '';
+      }
+      if (key.startsWith('idx:')) {
+        const idx = Number(key.slice(4));
+        const found = participants[idx];
+        return found ? found.name : '';
+      }
+      return '';
+    }
+
+    function markConflictState(item, conflicts, hasAnySelectionForBlock, canAssign, selectedHasConflict, assignedForSelected, isSingleParticipant) {
       const button = item.querySelector('.select-slot-btn');
       const note = item.querySelector('[data-role="conflict-note"]');
       const baseIsFull = item.getAttribute('data-is-full') === 'true' || item.classList.contains('is-full');
-      const isSelected = item.classList.contains('selected');
+      const allowAssignment = canAssign !== false && (!baseIsFull || assignedForSelected);
 
-      if (isSelected) {
-        item.classList.remove('disabled-overlap');
-        item.setAttribute('aria-disabled', 'false');
+      if (hasAnySelectionForBlock) {
+        item.classList.add('selected');
         item.setAttribute('aria-pressed', 'true');
-        const originalTab = item.dataset.originalTabindex || '0';
-        item.setAttribute('tabindex', originalTab);
-        if (button) {
-          button.disabled = false;
-          button.textContent = 'Selected';
-        }
-        if (note) {
-          note.textContent = '';
-          note.hidden = true;
-        }
-        return;
+      } else {
+        item.classList.remove('selected');
+        item.setAttribute('aria-pressed', 'false');
       }
 
-      if (conflicts.length) {
+      const shouldDisable = (conflicts.length && !allowAssignment) || (!!selectedHasConflict && !allowAssignment);
+      if (shouldDisable) {
         item.classList.add('disabled-overlap');
         item.setAttribute('aria-disabled', 'true');
-        item.setAttribute('aria-pressed', 'false');
         item.setAttribute('tabindex', '-1');
         if (button) {
           button.disabled = true;
           button.textContent = 'Conflict';
         }
-        if (note) {
-          const message = conflicts.length === 1
-            ? `Conflicts with ${formatSlotForMessage(conflicts[0])}`
-            : 'Conflicts with other selected opportunities';
-          note.textContent = message;
-          note.hidden = false;
-        }
-        return;
-      }
-
-      item.classList.remove('disabled-overlap');
-      item.setAttribute('aria-pressed', 'false');
-      if (!baseIsFull) {
-        item.setAttribute('aria-disabled', 'false');
-        const originalTab = item.dataset.originalTabindex || '0';
-        item.setAttribute('tabindex', originalTab);
-        if (button) {
-          button.disabled = false;
-          button.textContent = item.classList.contains('selected') ? 'Selected' : 'Select';
+      } else {
+        item.classList.remove('disabled-overlap');
+        if (allowAssignment) {
+          item.setAttribute('aria-disabled', 'false');
+          const originalTab = item.dataset.originalTabindex || '0';
+          item.setAttribute('tabindex', originalTab);
+          if (button) {
+            const disableBtn = selectedHasConflict && !assignedForSelected;
+            button.disabled = disableBtn;
+            if (assignedForSelected) {
+              button.textContent = 'Unassign';
+            } else if (isSingleParticipant) {
+              button.textContent = 'Select';
+            } else {
+              button.textContent = hasAnySelectionForBlock ? 'Assign another' : 'Assign';
+            }
+            if (assignedForSelected) button.classList.add('is-selected-assigned');
+            else button.classList.remove('is-selected-assigned');
+          }
         }
       }
       if (note) {
-        note.textContent = '';
-        note.hidden = true;
+        if (conflicts.length) {
+          note.textContent = conflicts.length === 1 ? conflicts[0] : 'This participant conflicts. Choose another participant.';
+          note.hidden = false;
+        } else {
+          note.textContent = '';
+          note.hidden = true;
+        }
       }
+    }
+
+    function participantHasConflict(participantKey, meta) {
+      if (!participantKey) return false;
+      if (!meta) return false;
+      const relevant = slotAssignments.filter(a => a.participantKey === participantKey && a.blockId !== Number(meta.id));
+      return relevant.some(other => slotsOverlap(meta, other));
+    }
+
+    function getAssignedCount(blockId) {
+      return slotAssignments.filter(a => a.blockId === Number(blockId)).length;
+    }
+
+    function isBlockAtCapacity(meta) {
+      if (!meta || !Number.isFinite(meta.capacity) || meta.capacity <= 0) return false;
+      const assigned = getAssignedCount(meta.id);
+      return (meta.reserved || 0) + assigned >= meta.capacity;
+    }
+
+    function getSlotLabel(meta) {
+      if (!meta) return 'Selection';
+      if (meta.stationName && meta.startLabel) return `${meta.stationName} — ${meta.startLabel}`;
+      if (meta.stationName && meta.itemTitle) return `${meta.stationName} — ${meta.itemTitle}`;
+      return meta.stationName || meta.itemTitle || 'Selection';
+    }
+
+    function updateCapacityStates() {
+      timeBlockItems.forEach(item => {
+        const meta = getSlotMeta(item);
+        const button = item.querySelector('.select-slot-btn');
+        const picker = item.querySelector('.participant-picker');
+        const participantKey = picker ? picker.value : null;
+        const assignedForSelected = participantKey
+          ? slotAssignments.some(a => a.blockId === Number(meta.id) && a.participantKey === participantKey)
+          : false;
+        if (!meta || !Number.isFinite(meta.capacity) || meta.capacity <= 0) {
+          item.classList.remove('is-full');
+          item.removeAttribute('data-is-full');
+          if (button) button.disabled = false;
+          return;
+        }
+        const assigned = getAssignedCount(meta.id);
+        const remaining = meta.capacity - (meta.reserved || 0) - assigned;
+        const full = remaining <= 0;
+        const options = picker ? Array.from(picker.options).map(o => o.value).filter(Boolean) : [];
+        const isSingleParticipant = options.length === 1;
+        if (full) {
+          item.classList.add('is-full');
+          item.setAttribute('data-is-full', 'true');
+          item.setAttribute('aria-disabled', 'true');
+          item.setAttribute('tabindex', '-1');
+          if (button) {
+            button.disabled = !assignedForSelected;
+            button.textContent = assignedForSelected ? 'Unassign' : 'Full';
+            if (assignedForSelected) button.classList.add('is-selected-assigned');
+            else button.classList.remove('is-selected-assigned');
+          }
+        } else {
+          item.classList.remove('is-full');
+          item.setAttribute('data-is-full', 'false');
+          const originalTab = item.dataset.originalTabindex || '0';
+          item.setAttribute('aria-disabled', 'false');
+          item.setAttribute('tabindex', originalTab);
+          if (button) {
+            button.disabled = false;
+            if (assignedForSelected) {
+              button.textContent = 'Unassign';
+              button.classList.add('is-selected-assigned');
+            } else if (isSingleParticipant) {
+              button.textContent = 'Select';
+              button.classList.remove('is-selected-assigned');
+            } else {
+              button.textContent = item.classList.contains('selected') ? 'Assign another' : 'Assign';
+              button.classList.remove('is-selected-assigned');
+            }
+          }
+        }
+      });
     }
 
     function updateConflictingSlots() {
       timeBlockItems.forEach(item => {
         const meta = getSlotMeta(item);
-        const conflicts = selectedSlots.filter(slot => slot.id !== meta.id && slotsOverlap(slot, meta));
-        markConflictState(item, conflicts);
+        const picker = item.querySelector('.participant-picker');
+        const participantKey = picker ? picker.value : null;
+        const conflicts = [];
+        const hasSelection = slotAssignments.some(s => s.blockId === Number(meta.id));
+        let canAssign = true;
+        const options = picker ? Array.from(picker.options).map(o => o.value).filter(Boolean) : [];
+        const isSingleParticipant = options.length === 1;
+        const selectedConflict = participantKey ? participantHasConflict(participantKey, meta) : false;
+        const assignedForSelected = participantKey
+          ? slotAssignments.some(a => a.blockId === Number(meta.id) && a.participantKey === participantKey)
+          : false;
+        if (participantKey && selectedConflict) {
+          const name = getParticipantNameByKey(participantKey) || 'Participant';
+          conflicts.push(`${name} has an overlapping time. Choose another participant.`);
+        }
+        if (options.length) {
+          const hasAvailable = options.some(key => !participantHasConflict(key, meta));
+          canAssign = hasAvailable;
+        }
+        if (isBlockAtCapacity(meta) && !assignedForSelected) {
+          canAssign = false;
+        }
+        markConflictState(item, conflicts, hasSelection, canAssign, selectedConflict, assignedForSelected, isSingleParticipant);
       });
     }
 
@@ -766,64 +1045,211 @@ document.addEventListener('DOMContentLoaded', () => {
       return [];
     }
 
-        function compareSlots(a, b) {
+    function compareAssignments(a, b) {
       const startA = Number.isFinite(a.start) ? a.start : Number.POSITIVE_INFINITY;
       const startB = Number.isFinite(b.start) ? b.start : Number.POSITIVE_INFINITY;
-      if (startA !== startB) {
-        return startA - startB;
-      }
+      if (startA !== startB) return startA - startB;
       const endA = Number.isFinite(a.end) ? a.end : Number.POSITIVE_INFINITY;
       const endB = Number.isFinite(b.end) ? b.end : Number.POSITIVE_INFINITY;
-      if (endA !== endB) {
-        return endA - endB;
-      }
+      if (endA !== endB) return endA - endB;
       const stationA = (a.stationName || '').toLowerCase();
       const stationB = (b.stationName || '').toLowerCase();
-      if (stationA !== stationB) {
-        return stationA.localeCompare(stationB);
-      }
+      if (stationA !== stationB) return stationA.localeCompare(stationB);
+      const partA = (a.participantName || '').toLowerCase();
+      const partB = (b.participantName || '').toLowerCase();
+      if (partA !== partB) return partA.localeCompare(partB);
       const textA = (a.displayText || '').toLowerCase();
       const textB = (b.displayText || '').toLowerCase();
       return textA.localeCompare(textB);
     }
 
-    function sortSelectedSlots() {
-      if (selectedSlots.length <= 1) return;
-      selectedSlots.sort(compareSlots);
+    function rebuildParticipantPickers() {
+      const options = participants.map((p, idx) => ({
+        value: isManageMode ? participantKeyFromId(p.id) : participantKeyFromIndex(idx),
+        label: p.name || `Participant ${idx + 1}`
+      }));
+      document.querySelectorAll('.participant-picker').forEach(sel => {
+        const isSingle = options.length === 1;
+        const blockId = Number(sel.closest('.time-block-item')?.getAttribute('data-block-id'));
+        const assigned = Number.isFinite(blockId)
+          ? slotAssignments.find(a => a.blockId === blockId)
+          : null;
+        const current = sel.dataset.userSet === '1' ? sel.value : (assigned ? assigned.participantKey : '');
+        sel.innerHTML = '';
+        if (!isSingle) {
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Choose participant…';
+          placeholder.disabled = true;
+          placeholder.selected = current === '' || current == null;
+          sel.appendChild(placeholder);
+        }
+        options.forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt.value;
+          o.textContent = opt.label;
+          sel.appendChild(o);
+        });
+        const stillValid = options.some(opt => opt.value === current);
+        const targetVal = stillValid
+          ? current
+          : (isSingle ? options[0]?.value : '');
+        sel.value = targetVal;
+        sel.disabled = isSingle;
+        const label = sel.closest('.participant-picker-wrap')?.querySelector('.participant-picker-label');
+        if (label) {
+          label.style.display = isSingle ? 'none' : '';
+        }
+        const button = sel.closest('.time-block-item')?.querySelector('.select-slot-btn');
+        if (button && isSingle) {
+          button.textContent = button.classList.contains('selected') ? 'Unassign' : 'Select';
+        }
+        if (!isSingle && (sel.value === '' || sel.value == null)) {
+          sel.selectedIndex = 0;
+          sel.dataset.userSet = '';
+        } else if (sel.value) {
+          sel.dataset.userSet = '1';
+        }
+      });
     }
 
+    function getParticipantOptions() {
+      return participants.map((p, idx) => ({
+        key: isManageMode ? participantKeyFromId(p.id) : participantKeyFromIndex(idx),
+        name: p.name || `Participant ${idx + 1}`
+      }));
+    }
 
-    function renderStepIndicator() {
-      if (!stepsContainer) return;
-      const hasSelection = selectedSlots.length > 0;
-      const needsDish = isPotluck ? anySelectedNeedsDish() : false;
-      const steps = isPotluck
-        ? ['Select items', 'Enter dish names', 'Enter contact info']
-        : ['Select opportunities', 'Enter contact info', 'Confirm selections'];
-      let activeIdx = 0;
-      if (hasSelection) activeIdx = isPotluck ? (needsDish ? 1 : 2) : 1;
-      stepsContainer.innerHTML = '';
-      const ol = document.createElement('ol');
-      ol.className = 'signup-steps__list';
-      steps.forEach((label, i) => {
-        const li = document.createElement('li');
-        li.className = 'signup-step' + (i === activeIdx ? ' is-active' : '');
-        li.innerHTML = `<span class="signup-step__num">${i + 1}</span><span class="signup-step__label">${label}</span>`;
-        ol.appendChild(li);
+    function ensureParticipantInputs() {
+      if (isManageMode || !participantListEl) return;
+      let count = Number(partySizeInput && partySizeInput.value);
+      if (!Number.isFinite(count) || count < 1) count = 1;
+      while (participants.length < count) participants.push({ name: '' });
+      if (participants.length > count) participants = participants.slice(0, count);
+
+      const registrantParticipating = registrantRadioEls.some(r => r.checked && r.value === 'yes');
+      const registrantNameInput = document.getElementById('signup-name');
+      const registrantName = registrantNameInput ? String(registrantNameInput.value || '').trim() : '';
+      if (registrantParticipating) {
+        if (!participants.length) participants.push({ name: registrantName || 'You' });
+        else participants[0].name = registrantName || 'You';
+      } else if (participants[0] && (participants[0].name === registrantName || participants[0].name === 'You')) {
+        participants[0].name = '';
+      }
+      if (participants.length > 1) {
+        lastSelectedParticipantKey = null;
+      }
+
+      // Drop assignments for participants that no longer exist (e.g., after lowering count)
+      const validKeys = new Set(getParticipantOptions().map(opt => opt.key));
+      for (let i = slotAssignments.length - 1; i >= 0; i -= 1) {
+        if (!validKeys.has(slotAssignments[i].participantKey)) {
+          slotAssignments.splice(i, 1);
+        }
+      }
+
+      participantListEl.innerHTML = '';
+      const list = document.createElement('div');
+      list.className = 'participant-inputs';
+      participants.forEach((p, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'form-group';
+        const label = document.createElement('label');
+        label.textContent = `Participant ${idx + 1}`;
+        label.setAttribute('for', `participant-${idx}`);
+        const input = document.createElement('input');
+        input.id = `participant-${idx}`;
+        input.type = 'text';
+        input.value = p.name || '';
+        input.placeholder = 'Full name';
+        input.addEventListener('input', () => {
+          participants[idx].name = input.value;
+          input.classList.remove('input-error');
+          input.removeAttribute('aria-invalid');
+          if (!isManageMode) {
+            step1Complete = false;
+            updateStepVisibility();
+            updateSignupFormVisibility();
+          }
+          rebuildParticipantPickers();
+          renderSelectedList();
+          rebuildPayload();
+        });
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        list.appendChild(wrap);
       });
-      stepsContainer.appendChild(ol);
+      participantListEl.appendChild(list);
+      rebuildParticipantPickers();
+      renderSelectedList();
+      rebuildPayload();
+      updateConflictingSlots();
+      updateSelectionFabVisibility();
+    }
+
+    function addAssignment(meta, participantKey, dishName) {
+      if (!meta || !participantKey) return;
+      const blockId = Number(meta.id);
+      const participantName = getParticipantNameByKey(participantKey);
+      const existing = slotAssignments.find(a => a.blockId === blockId && a.participantKey === participantKey);
+      if (existing) return;
+      if (isBlockAtCapacity(meta)) {
+        const item = timeBlockItems.find(el => el.getAttribute('data-block-id') === String(meta.id));
+        const note = item ? item.querySelector('[data-role="conflict-note"]') : null;
+        if (note) {
+          note.textContent = 'This slot is already full.';
+          note.hidden = false;
+        }
+        return;
+      }
+      slotAssignments.push({
+        slotId: `${blockId}:${participantKey}`,
+        blockId,
+        participantKey,
+        participantName,
+        stationName: meta.stationName,
+        startRaw: meta.startRaw,
+        endRaw: meta.endRaw,
+        start: meta.start,
+        end: meta.end,
+        startLabel: meta.startLabel,
+        endLabel: meta.endLabel,
+        displayText: getDisplayTextFromItem(document.querySelector(`.time-block-item[data-block-id="${meta.id}"]`)),
+        itemTitle: meta.itemTitle,
+        dishName: dishName || ''
+      });
+      lastSelectedParticipantKey = participantKey;
+      slotAssignments.sort(compareAssignments);
+      updateConflictingSlots();
+      updateCapacityStates();
+      renderSelectedList();
+      rebuildPayload();
+      updateSignupFormVisibility();
+      updateSelectionFabVisibility();
+      showToast(`${participantName || 'Participant'} assigned to ${getSlotLabel(meta)}.`);
+    }
+
+    function removeAssignment(slotId, participantKey) {
+      const idx = slotAssignments.findIndex(a => a.slotId === slotId && a.participantKey === participantKey);
+      if (idx >= 0) {
+        slotAssignments.splice(idx, 1);
+        updateConflictingSlots();
+        updateCapacityStates();
+        renderSelectedList();
+        rebuildPayload();
+        updateSignupFormVisibility();
+        updateSelectionFabVisibility();
+      }
     }
 
     function renderSelectedList() {
-      if (!selectedSlotsContainer) return; // Schedule mode: no selected list UI
+      if (!selectedSlotsContainer) return;
       selectedSlotsContainer.innerHTML = '';
       const title = document.createElement('h4');
       title.textContent = isPotluck ? 'Selected Items' : 'Selected Opportunities';
       selectedSlotsContainer.appendChild(title);
 
-      // Column header removed for clarity/responsiveness; each row now includes its own label.
-
-      if (!selectedSlots.length) {
+      if (!slotAssignments.length) {
         const empty = document.createElement('p');
         empty.className = 'muted';
         empty.textContent = 'No selections yet.';
@@ -831,233 +1257,229 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      sortSelectedSlots();
-
       const ul = document.createElement('ul');
-      selectedSlots.forEach(slot => {
+      slotAssignments.forEach(assign => {
         const li = document.createElement('li');
-        li.classList.add('selected-slot');
+        li.className = 'selected-slot';
 
         const textWrap = document.createElement('div');
         textWrap.className = 'selected-slot__text';
 
+        const personLine = document.createElement('div');
+        personLine.className = 'selected-slot__person';
+        personLine.textContent = assign.participantName || 'Participant';
+        textWrap.appendChild(personLine);
+
         const stationLine = document.createElement('span');
         stationLine.className = 'selected-slot__station';
         if (isPotluck) {
-          const cat = (slot.stationName || '').trim();
-          const item = (slot.itemTitle || '').trim();
-          // Build: [Category chip] [Item text with ellipsis]
-          stationLine.textContent = '';
-          stationLine.classList.add('selected-slot__station--inline');
-          const catChip = document.createElement('span');
-          catChip.className = 'cat-chip';
-          catChip.textContent = cat || 'Category';
-          const itemSpan = document.createElement('span');
-          itemSpan.className = 'selected-slot__item';
-          itemSpan.textContent = item || 'Item';
-          if (item) itemSpan.title = `${cat ? cat + ' — ' : ''}${item}`;
-          stationLine.appendChild(catChip);
-          stationLine.appendChild(itemSpan);
-          // keep compact single visual line
+          stationLine.textContent = `${assign.stationName || 'Category'} — ${assign.itemTitle || 'Item'}`;
         } else {
-          stationLine.textContent = slot.stationName || slot.displayText || 'Selected opportunity';
+          stationLine.textContent = assign.stationName || assign.displayText || 'Opportunity';
           const timeLine = document.createElement('span');
           timeLine.className = 'selected-slot__time';
-          timeLine.textContent = formatSelectedSlotTime(slot);
+          timeLine.textContent = formatSelectedSlotTime(assign);
           textWrap.appendChild(timeLine);
         }
         textWrap.appendChild(stationLine);
-
         li.appendChild(textWrap);
 
-        // For potluck events, collect a dish name per selected item
+        // Participant reassignment
+        const picker = document.createElement('select');
+        picker.className = 'participant-picker-inline';
+        getParticipantOptions().forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt.key;
+          o.textContent = opt.name;
+          picker.appendChild(o);
+        });
+        picker.value = assign.participantKey;
+        picker.addEventListener('change', () => {
+          const newKey = picker.value;
+          if (!newKey) return;
+          // prevent duplicate for same block
+          const exists = slotAssignments.find(a => a.blockId === assign.blockId && a.participantKey === newKey);
+          if (exists) {
+            picker.value = assign.participantKey;
+            return;
+          }
+          assign.participantKey = newKey;
+          assign.participantName = getParticipantNameByKey(newKey);
+          assign.slotId = `${assign.blockId}:${newKey}`;
+          slotAssignments.sort(compareAssignments);
+          rebuildPayload();
+          updateConflictingSlots();
+          renderSelectedList();
+        });
+        li.appendChild(picker);
+
         if (isPotluck) {
           const noteWrap = document.createElement('div');
           noteWrap.className = 'selected-slot__note';
           const labelEl = document.createElement('label');
-          labelEl.textContent = 'Dish name (required)';
+          labelEl.textContent = 'Dish name';
           labelEl.className = 'sr-only';
           const input = document.createElement('input');
           input.type = 'text';
-          input.id = `dish-note-${slot.id}`;
-          input.name = `dish_notes[${slot.id}]`;
-          input.placeholder = 'Enter dish name (required)';
-          // Pre-fill from DOM if available (manage view)
-          try {
-            const srcItem = timeBlockItems.find(el => el.getAttribute('data-block-id') === slot.id);
-            if (srcItem) {
-              const existing = srcItem.getAttribute('data-dish-note');
-              if (existing) input.value = existing;
-            }
-          } catch (_) {}
+          input.placeholder = 'Enter dish name';
+          input.value = assign.dishName || '';
+          input.setAttribute('data-assignment-id', assign.slotId);
+          input.addEventListener('input', () => {
+            assign.dishName = input.value;
+            input.classList.remove('input-error');
+            input.removeAttribute('aria-invalid');
+            rebuildPayload();
+          });
           noteWrap.appendChild(labelEl);
           noteWrap.appendChild(input);
           li.appendChild(noteWrap);
         }
 
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'selected-slot-remove';
-        remove.textContent = 'Remove';
-        remove.setAttribute('data-slot-id', slot.id);
-        remove.addEventListener('click', () => {
-          const item = timeBlockItems.find(el => el.getAttribute('data-block-id') === slot.id);
-          if (item) {
-            toggleSlotSelection(item);
-          }
-        });
-        li.appendChild(remove);
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'selected-slot-remove';
+        removeBtn.textContent = 'Remove';
+        removeBtn.addEventListener('click', () => removeAssignment(assign.slotId, assign.participantKey));
+        li.appendChild(removeBtn);
 
         ul.appendChild(li);
       });
       selectedSlotsContainer.appendChild(ul);
 
-      // Removed additional hint text; step headings and required fields guide the flow.
-
-      if (DEBUG) console.debug('[VolunteerUI] Selected list rendered:', selectedSlots.map(s => ({ id: s.id, displayText: s.displayText })));
+      const badge = document.getElementById('selectedCountBadge');
+      if (badge) {
+        badge.textContent = `(${slotAssignments.length})`;
+        badge.style.display = '';
+      }
     }
 
-    function rebuildHiddenInputs() {
-      signupForm.querySelectorAll('input[name="blockIds[]"]').forEach(input => input.remove());
-      selectedSlots.forEach(slot => {
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = 'blockIds[]';
-        hidden.value = slot.id;
-        signupForm.appendChild(hidden);
-      });
-      const formData = new FormData(signupForm);
-      if (DEBUG) console.debug('[VolunteerUI] Hidden inputs now:', Array.from(formData.entries()));
+    function updateStepVisibility() {
+      if (!isManageMode && selectionStep) {
+        selectionStep.style.display = step1Complete ? '' : 'none';
+      }
+      if (!isManageMode && reviewStep) {
+        reviewStep.style.display = step1Complete ? '' : 'none';
+      }
     }
 
     function updateSignupFormVisibility() {
-      const hasSel = selectedSlots.length > 0;
-      const show = (isManageMode || hasSel);
+      const hasSel = slotAssignments.length > 0;
+      const canShow = (isManageMode || step1Complete);
+      const show = canShow && (isManageMode || hasSel);
       if (selectedPanel) selectedPanel.style.display = show ? 'block' : 'none';
       if (signupFormContainer) signupFormContainer.style.display = show ? 'block' : 'none';
       const step2 = document.getElementById('step2Heading');
       const step3 = document.getElementById('step3Heading');
       if (step2) step2.style.display = show ? '' : 'none';
       if (step3) step3.style.display = show ? '' : 'none';
-      const badge = document.getElementById('selectedCountBadge');
-      if (badge) {
-        if (hasSel) {
-          badge.textContent = `(${selectedSlots.length})`;
-          badge.style.display = '';
-        } else {
-          badge.style.display = 'none';
-        }
+    }
+
+    function buildPayload() {
+      const eventIdInput = signupForm.querySelector('input[name="eventId"]');
+      const eventId = eventIdInput ? eventIdInput.value : '';
+      const registrant = {
+        name: (document.getElementById('signup-name') || {}).value || '',
+        email: (document.getElementById('signup-email') || {}).value || '',
+        phone: (document.getElementById('signup-phone') || {}).value || ''
+      };
+      const payload = { eventId, registrant, participants: [], scheduleAssignments: [], potluckAssignments: [] };
+      const participantOptions = getParticipantOptions();
+      const partySizeVal = Number(partySizeInput && partySizeInput.value);
+      const registrantParticipating = registrantRadioEls.some(r => r.checked && r.value === 'yes');
+
+      if (!isManageMode) {
+        payload.partySize = Number.isFinite(partySizeVal) && partySizeVal > 0 ? partySizeVal : participants.length;
+        payload.party_size = payload.partySize;
+        payload.registrant_participating = registrantParticipating ? 'yes' : 'no';
+        payload.participants = participants.map(p => String(p.name || '').trim());
+        slotAssignments.forEach(assign => {
+          const idx = participantOptions.findIndex(opt => opt.key === assign.participantKey);
+          if (idx === -1) return;
+          if (isPotluck) {
+            payload.potluckAssignments.push({
+              itemId: assign.blockId,
+              participantIndex: idx,
+              dishName: assign.dishName || ''
+            });
+          } else {
+            payload.scheduleAssignments.push({
+              blockId: assign.blockId,
+              participantIndex: idx
+            });
+          }
+        });
+      } else {
+        slotAssignments.forEach(assign => {
+          const pid = assign.participantKey.startsWith('id:') ? Number(assign.participantKey.slice(3)) : null;
+          if (!pid) return;
+          if (isPotluck) {
+            payload.potluckAssignments.push({
+              itemId: assign.blockId,
+              participantId: pid,
+              dishName: assign.dishName || ''
+            });
+          } else {
+            payload.scheduleAssignments.push({
+              blockId: assign.blockId,
+              participantId: pid
+            });
+          }
+        });
       }
+      return payload;
     }
 
-    function anySelectedNeedsDish() {
-      if (!isPotluck) return false;
-      return selectedSlots.some(slot => {
-        const input = document.getElementById(`dish-note-${slot.id}`);
-        const val = input ? String(input.value || '').trim() : '';
-        return val.length === 0;
+    function rebuildPayload() {
+      const payloadInput = document.getElementById('registration-payload');
+      if (!payloadInput) return;
+      const payload = buildPayload();
+      payloadInput.value = JSON.stringify(payload);
+    }
+
+    function hydrateAssignmentsFromPayload() {
+      if (isManageMode || !initialPayload || slotAssignments.length) return;
+      const participantOptions = getParticipantOptions();
+
+      const schedule = Array.isArray(initialPayload.scheduleAssignments) ? initialPayload.scheduleAssignments : [];
+      schedule.forEach(assign => {
+        const blockId = Number(assign.blockId || assign.time_block_id || assign);
+        const idx = Number(assign.participantIndex);
+        const participantKey = Number.isFinite(idx) && participantOptions[idx] ? participantOptions[idx].key : null;
+        if (!participantKey || !Number.isFinite(blockId)) return;
+        const metaItem = timeBlockItems.find(el => el.getAttribute('data-block-id') === String(blockId));
+        if (!metaItem) return;
+        const meta = getSlotMeta(metaItem);
+        addAssignment(meta, participantKey);
+      });
+
+      const potluck = Array.isArray(initialPayload.potluckAssignments) ? initialPayload.potluckAssignments : [];
+      potluck.forEach(assign => {
+        const blockId = Number(assign.itemId || assign.block_id || assign);
+        const idx = Number(assign.participantIndex);
+        const participantKey = Number.isFinite(idx) && participantOptions[idx] ? participantOptions[idx].key : null;
+        if (!participantKey || !Number.isFinite(blockId)) return;
+        const metaItem = timeBlockItems.find(el => el.getAttribute('data-block-id') === String(blockId));
+        if (!metaItem) return;
+        const meta = getSlotMeta(metaItem);
+        addAssignment(meta, participantKey, assign.dishName || assign.dish || '');
       });
     }
 
-    function updateDishRequirement() {
-      if (!isPotluck) return;
-      selectedSlots.forEach(slot => {
-        const input = document.getElementById(`dish-note-${slot.id}`);
-        if (!input) return;
-        input.setAttribute('required', 'required');
-        input.setAttribute('aria-required', 'true');
-        input.setAttribute('placeholder', 'Enter dish name (required)');
+    function updateParticipantNamesFromInputs() {
+      if (isManageMode) return;
+      const inputs = participantListEl ? participantListEl.querySelectorAll('input[id^="participant-"]') : [];
+      inputs.forEach((input, idx) => {
+        if (participants[idx]) participants[idx].name = input.value;
       });
-    }
-
-    function updateSelectionFab() {
-      if (!selectionFab) return;
+      slotAssignments.forEach(assign => {
+        assign.participantName = getParticipantNameByKey(assign.participantKey);
+      });
+      rebuildParticipantPickers();
+      renderSelectedList();
+      rebuildPayload();
+      updateConflictingSlots();
       updateSelectionFabVisibility();
     }
-
-    function toggleSlotSelection(item) {
-      const id = item.getAttribute('data-block-id');
-      if (!id) {
-        console.error('[VolunteerUI] Missing data-block-id on time-block-item:', item);
-        return;
-      }
-      if (item.classList.contains('disabled-overlap')) {
-        return;
-      }
-
-      const existingIdx = selectedSlots.findIndex(s => s.id === id);
-      if (existingIdx >= 0) {
-        selectedSlots.splice(existingIdx, 1);
-        item.classList.remove('selected');
-        item.classList.remove('disabled-overlap');
-        item.setAttribute('aria-pressed', 'false');
-        const btn = item.querySelector('.select-slot-btn');
-        if (btn) btn.textContent = 'Select';
-      } else {
-        const slotMeta = getSlotMeta(item);
-        const displayText = getDisplayTextFromItem(item);
-
-        selectedSlots.push({ id, displayText, ...slotMeta });
-        sortSelectedSlots();
-        item.classList.add('selected');
-        item.setAttribute('aria-pressed', 'true');
-        const btn = item.querySelector('.select-slot-btn');
-        if (btn) btn.textContent = 'Selected';
-      }
-
-      renderSelectedList();
-      rebuildHiddenInputs();
-      updateSignupFormVisibility();
-      updateConflictingSlots();
-      updateSelectionFab();
-      updateDishRequirement();
-
-      // Removed auto-scroll on first selection to avoid focus jump. Users can use the
-      // "Continue to sign-up" button to navigate to the form.
-
-      // Do not move focus automatically after selection; this can cause the page
-      // to scroll unexpectedly on mobile. Users can continue selecting or use the
-      // floating button to jump to the form when ready.
-
-      if (DEBUG) console.debug('[VolunteerUI] Selected opportunities:', selectedSlots);
-    }
-
-    // Pre-populate from any items already marked as selected (manage experience)
-    timeBlockItems.forEach(item => {
-      if (!item.classList.contains('selected')) return;
-      const id = item.getAttribute('data-block-id');
-      if (!id || selectedSlots.some(slot => slot.id === id)) return;
-      item.setAttribute('aria-pressed', 'true');
-      const button = item.querySelector('.select-slot-btn');
-      if (button) button.textContent = 'Selected';
-      const slotMeta = getSlotMeta(item);
-      selectedSlots.push({ id, displayText: getDisplayTextFromItem(item), ...slotMeta });
-    });
-
-    updateConflictingSlots();
-    updateSelectionFab();
-
-    if (isManageMode) {
-      renderSelectedList();
-      rebuildHiddenInputs();
-      updateSignupFormVisibility();
-    } else if (selectedSlots.length) {
-      renderSelectedList();
-      rebuildHiddenInputs();
-      updateSignupFormVisibility();
-    }
-
-    timeBlockItems.forEach(item => {
-      const id = item.getAttribute('data-block-id');
-      const parent = item.parentElement;
-      if (!id || !parent || originalPlacement.has(id)) return;
-      const placeholder = document.createComment(`slot-placeholder-${id}`);
-      parent.insertBefore(placeholder, item);
-      const meta = getSlotMeta(item);
-      if (!Number.isNaN(meta.start)) item.dataset.startTs = String(meta.start);
-      if (!Number.isNaN(meta.end)) item.dataset.endTs = String(meta.end);
-      originalPlacement.set(id, { parent, placeholder });
-    });
 
     function applyViewMode(mode) {
       if (!stationView || !timeView || !timeViewList) return;
@@ -1098,219 +1520,430 @@ document.addEventListener('DOMContentLoaded', () => {
       updateConflictingSlots();
     }
 
+    timeBlockItems.forEach(item => {
+      const id = item.getAttribute('data-block-id');
+      const parent = item.parentElement;
+      if (!id || !parent || originalPlacement.has(id)) return;
+      const placeholder = document.createComment(`slot-placeholder-${id}`);
+      parent.insertBefore(placeholder, item);
+      const meta = getSlotMeta(item);
+      if (!Number.isNaN(meta.start)) item.dataset.startTs = String(meta.start);
+      if (!Number.isNaN(meta.end)) item.dataset.endTs = String(meta.end);
+      originalPlacement.set(id, { parent, placeholder });
+    });
+
     if (viewModeSelect && stationView && timeView && timeViewList) {
       viewModeSelect.addEventListener('change', () => {
         applyViewMode(viewModeSelect.value === 'time' ? 'time' : 'station');
       });
+      applyViewMode(viewModeSelect.value === 'time' ? 'time' : 'station');
     }
 
-    // Bind Select buttons and item interactions
+    // Bind Select buttons and participant pickers
     timeBlockItems.forEach(item => {
       const button = item.querySelector('.select-slot-btn');
       const isFull = item.getAttribute('data-is-full') === 'true' || item.classList.contains('is-full');
       item.setAttribute('aria-disabled', isFull ? 'true' : 'false');
       item.setAttribute('aria-pressed', item.classList.contains('selected') ? 'true' : 'false');
+
+      if (!item.querySelector('.participant-picker') && !isFull) {
+        const options = getParticipantOptions();
+        const isSingle = options.length === 1;
+        const picker = document.createElement('select');
+        picker.className = 'participant-picker';
+        const wrap = document.createElement('div');
+        wrap.className = 'participant-picker-wrap';
+        const label = document.createElement('span');
+        label.className = 'participant-picker-label';
+        label.textContent = 'Assign to';
+        wrap.appendChild(label);
+        if (isSingle) {
+          label.style.display = 'none';
+        } else {
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Choose participant…';
+          placeholder.disabled = true;
+          placeholder.selected = true;
+          picker.appendChild(placeholder);
+        }
+        options.forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt.key;
+          o.textContent = opt.name;
+          if (!isSingle && lastSelectedParticipantKey && opt.key === lastSelectedParticipantKey) {
+            o.selected = true;
+          }
+          if (isSingle) o.selected = true;
+          picker.appendChild(o);
+        });
+        picker.disabled = isSingle;
+        if (!isSingle) {
+          picker.value = '';
+          picker.dataset.userSet = '';
+        } else {
+          picker.dataset.userSet = '1';
+        }
+        wrap.appendChild(picker);
+        const actionWrap = item.querySelector('.time-block-item__action') || item;
+        actionWrap.insertBefore(wrap, button);
+      }
+      const picker = item.querySelector('.participant-picker');
+      if (picker) {
+        picker.addEventListener('change', () => {
+          lastSelectedParticipantKey = picker.value || null;
+          picker.dataset.userSet = picker.value ? '1' : '';
+          updateConflictingSlots();
+        });
+      }
+
       if (button) {
         button.disabled = !!isFull;
         if (!isFull) {
-          button.textContent = item.classList.contains('selected') ? 'Selected' : 'Select';
+          button.textContent = item.classList.contains('selected') ? 'Assign another' : 'Assign';
         }
         button.addEventListener('click', (e) => {
           e.preventDefault();
           if (button.disabled) return;
-          toggleSlotSelection(item);
-        });
-      }
-      if (!isFull) {
-        item.addEventListener('click', (e) => {
-          if (button && e.target.closest('.select-slot-btn')) return;
-          toggleSlotSelection(item);
-        });
-        item.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleSlotSelection(item);
+          const meta = getSlotMeta(item);
+          const participantKey = picker ? picker.value : (getParticipantOptions()[0] && getParticipantOptions()[0].key);
+          if (!participantKey) {
+            const note = item.querySelector('[data-role="conflict-note"]');
+            if (note) {
+              note.textContent = 'Pick who you want to assign first.';
+              note.hidden = false;
+            }
+            if (picker) picker.focus();
+            return;
           }
+          const existing = slotAssignments.find(a => a.blockId === Number(meta.id) && a.participantKey === participantKey);
+          if (existing) {
+            removeAssignment(existing.slotId, participantKey);
+            return;
+          }
+          if (participantHasConflict(participantKey, meta)) {
+            const note = item.querySelector('[data-role="conflict-note"]');
+            const name = getParticipantNameByKey(participantKey) || 'Participant';
+            if (note) {
+              note.textContent = `${name} has an overlapping time. Choose another participant.`;
+              note.hidden = false;
+            }
+            button.disabled = true;
+            return;
+          }
+          const exists = slotAssignments.find(a => a.blockId === Number(meta.id) && a.participantKey === participantKey);
+          if (exists) return;
+          addAssignment(meta, participantKey);
         });
       }
     });
 
-    if (viewModeSelect) {
-      applyViewMode(viewModeSelect.value === 'time' ? 'time' : 'station');
-    }
-
-    // Helpers for inline contact validation
-    const emailInput = signupForm.querySelector('#signup-email');
-    const phoneInput = signupForm.querySelector('#signup-phone');
-
-    function getErrorIdForInput(input) {
-      const base = input.id || input.name || 'field';
-      return `${base}-error`;
-    }
-
-    function clearFieldError(input) {
-      if (!input) return;
-      input.classList.remove('input-error');
-      input.removeAttribute('aria-invalid');
-      const errorId = getErrorIdForInput(input);
-      const existing = document.getElementById(errorId);
-      if (existing && existing.parentNode) {
-        existing.parentNode.removeChild(existing);
+    function getErrorBox() {
+      let box = document.getElementById('signup-client-errors');
+      if (!box) {
+        const host = signupFormContainer || signupForm || document.body;
+        box = document.createElement('div');
+        box.id = 'signup-client-errors';
+        box.className = 'notice notice--error';
+        if (host.firstChild) host.insertBefore(box, host.firstChild);
+        else host.appendChild(box);
       }
-      const describedBy = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
-      const next = describedBy.filter(id => id !== errorId);
-      if (next.length) {
-        input.setAttribute('aria-describedby', next.join(' '));
-      } else {
-        input.removeAttribute('aria-describedby');
+      return box;
+    }
+
+    function clearStep1Errors() {
+      if (step1ErrorBox) {
+        step1ErrorBox.style.display = 'none';
+        step1ErrorBox.textContent = '';
+      }
+      const step1Fields = [];
+      ['signup-name', 'signup-email'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) step1Fields.push(el);
+      });
+      if (participantListEl) {
+        step1Fields.push(...participantListEl.querySelectorAll('input[id^="participant-"]'));
+      }
+      step1Fields.forEach(el => {
+        el.classList.remove('input-error');
+        el.removeAttribute('aria-invalid');
+      });
+    }
+
+    function clearClientErrors() {
+      const root = signupFormContainer || signupForm || document;
+      const box = document.getElementById('signup-client-errors');
+      if (box) {
+        box.style.display = 'none';
+        box.textContent = '';
+      }
+      clearStep1Errors();
+      if (root) {
+        root.querySelectorAll('.input-error').forEach(el => {
+          el.classList.remove('input-error');
+          el.removeAttribute('aria-invalid');
+        });
       }
     }
 
-    function setFieldError(input, message) {
+    function markInvalid(input) {
       if (!input) return;
-      clearFieldError(input);
       input.classList.add('input-error');
       input.setAttribute('aria-invalid', 'true');
-      const errorId = getErrorIdForInput(input);
-      const error = document.createElement('p');
-      error.id = errorId;
-      error.className = 'field-error';
-      error.textContent = message;
-      const parent = input.parentNode;
-      if (parent) {
-        if (input.nextSibling) {
-          parent.insertBefore(error, input.nextSibling);
-        } else {
-          parent.appendChild(error);
-        }
+    }
+
+    function showStep1Error(message, focusEl) {
+      if (step1ErrorBox) {
+        step1ErrorBox.textContent = message;
+        step1ErrorBox.style.display = '';
       }
-      const describedBy = (input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
-      if (!describedBy.includes(errorId)) {
-        describedBy.push(errorId);
-        input.setAttribute('aria-describedby', describedBy.join(' '));
+      if (focusEl && typeof focusEl.focus === 'function') {
+        focusEl.focus();
+      }
+      const target = focusEl || step1ErrorBox;
+      if (target && typeof target.scrollIntoView === 'function' && !isInViewport(target)) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
 
-    function validateEmailField() {
-      if (!emailInput) return true;
-      const value = String(emailInput.value || '').trim();
-      clearFieldError(emailInput);
-      if (!value) {
-        setFieldError(emailInput, 'Email is required.');
-        return false;
-      }
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
-        setFieldError(emailInput, 'Please provide a valid email address.');
-        return false;
-      }
-      return true;
-    }
+    function validateStep1() {
+      if (isManageMode) return { ok: true };
+      clearStep1Errors();
+      const errors = [];
+      let focusEl = null;
 
-    function validatePhoneField() {
-      if (!phoneInput) return true;
-      const raw = String(phoneInput.value || '').trim();
-      const digits = raw.replace(/\D/g, '');
-      clearFieldError(phoneInput);
-      if (!raw) {
-        setFieldError(phoneInput, 'Phone number is required.');
-        return false;
-      }
-      if (digits.length !== 10) {
-        setFieldError(phoneInput, 'Phone number must be 10 digits.');
-        return false;
-      }
-      return true;
-    }
+      const registrantNameInput = document.getElementById('signup-name');
+      const registrantEmailInput = document.getElementById('signup-email');
+      const registrantName = registrantNameInput ? String(registrantNameInput.value || '').trim() : '';
+      const registrantEmail = registrantEmailInput ? String(registrantEmailInput.value || '').trim() : '';
+      const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(registrantEmail);
 
-    if (emailInput) {
-      emailInput.addEventListener('blur', () => {
-        validateEmailField();
+      if (!registrantName) {
+        errors.push('Please enter your name.');
+        markInvalid(registrantNameInput);
+        focusEl = focusEl || registrantNameInput;
+      }
+      if (!registrantEmail || !emailValid) {
+        errors.push('Please enter a valid email.');
+        markInvalid(registrantEmailInput);
+        focusEl = focusEl || registrantEmailInput;
+      }
+
+      const participantInputs = participantListEl ? Array.from(participantListEl.querySelectorAll('input[id^="participant-"]')) : [];
+      const emptyInputs = participantInputs.filter(input => !String(input.value || '').trim());
+      if (emptyInputs.length) {
+        errors.push('Enter a name for each participant.');
+        emptyInputs.forEach(markInvalid);
+        focusEl = focusEl || emptyInputs[0];
+      }
+
+      const nameBuckets = new Map();
+      participantInputs.forEach(input => {
+        const name = String(input.value || '').trim();
+        if (!name) return;
+        const key = name.toLowerCase();
+        const list = nameBuckets.get(key) || [];
+        list.push(input);
+        nameBuckets.set(key, list);
       });
-    }
-    if (phoneInput) {
-      phoneInput.addEventListener('blur', () => {
-        validatePhoneField();
-      });
+      const dupInputs = Array.from(nameBuckets.values()).filter(list => list.length > 1).flat();
+      if (dupInputs.length) {
+        errors.push('Participant names must be unique.');
+        dupInputs.forEach(markInvalid);
+        focusEl = focusEl || dupInputs[0];
+      }
+
+      if (errors.length) {
+        return { ok: false, message: errors[0], focusEl };
+      }
+      return { ok: true };
     }
 
-    // Initial render
-    updateSignupFormVisibility();
-    updateDishRequirement();
+    function showClientError(message, focusEl) {
+      const box = getErrorBox();
+      if (box) {
+        box.textContent = message;
+        box.style.display = '';
+      }
+      if (focusEl && typeof focusEl.focus === 'function') {
+        focusEl.focus();
+      }
+      if (focusEl && typeof focusEl.scrollIntoView === 'function' && !isInViewport(focusEl)) {
+        focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (!focusEl && box && typeof box.scrollIntoView === 'function') {
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
 
-    // Submission debug and client-side validation
-    signupForm.addEventListener('submit', (e) => {
-      const formData = new FormData(signupForm);
-      if (DEBUG) console.debug('[VolunteerUI] Submitting with data:', Array.from(formData.entries()));
-      // Server persists; we do not alter any times client-side.
-      if (isPotluck) {
-        // Validate per selected slot
-        const missing = [];
-        selectedSlots.forEach(slot => {
-          const input = document.getElementById(`dish-note-${slot.id}`);
-          const val = input ? (input.value || '').trim() : '';
-          // Clear any previous error state
-          if (input) {
-            input.classList.remove('input-error');
-            input.removeAttribute('aria-invalid');
+    // Basic validation on submit: ensure selections and participant names are valid
+    if (signupForm) {
+      signupForm.addEventListener('submit', (e) => {
+        clearClientErrors();
+        const errors = [];
+        let focusEl = null;
+
+        const payload = buildPayload();
+        if (!isManageMode) {
+          const step1Result = validateStep1();
+          if (!step1Result.ok) {
+            e.preventDefault();
+            showStep1Error(step1Result.message, step1Result.focusEl);
+            return false;
           }
-          if (!val) {
-            missing.push(slot);
-            if (input) {
-              input.classList.add('input-error');
-              input.setAttribute('aria-invalid', 'true');
+          step1Complete = true;
+          updateStepVisibility();
+        }
+        if (!isManageMode && slotAssignments.length === 0) {
+          errors.push('Add at least one assignment.');
+          focusEl = focusEl || selectionFabButton || signupForm;
+        }
+        if (isPotluck) {
+          const missingDish = slotAssignments.find(a => !a.dishName || !String(a.dishName).trim());
+          if (missingDish) {
+            errors.push('Please enter a dish name for each item.');
+            const dishInput = selectedSlotsContainer
+              ? selectedSlotsContainer.querySelector(`.selected-slot__note input[data-assignment-id="${missingDish.slotId}"]`)
+              : null;
+            if (dishInput) {
+              markInvalid(dishInput);
+              focusEl = focusEl || dishInput;
             }
           }
-        });
-        // Sync per-item dish inputs into hidden inputs inside the form
-        signupForm.querySelectorAll('input[name^="dish_notes["]').forEach(h => { if (h.closest('#selected-slots-container')) h.remove(); });
-        selectedSlots.forEach(slot => {
-          const source = document.getElementById(`dish-note-${slot.id}`);
-          if (!source) return;
-          const hidden = document.createElement('input');
-          hidden.type = 'hidden';
-          hidden.name = `dish_notes[${slot.id}]`;
-          hidden.value = source.value || '';
-          signupForm.appendChild(hidden);
-        });
-        if (missing.length) {
+        }
+
+        if (errors.length) {
           e.preventDefault();
-          try {
-            let box = document.getElementById('selectedDishErrors');
-            if (!box) {
-              box = document.createElement('div');
-              box.id = 'selectedDishErrors';
-              box.className = 'notice notice--error';
-              const afterTitle = selectedSlotsContainer.querySelector('h4');
-              if (afterTitle && afterTitle.parentNode === selectedSlotsContainer) {
-                selectedSlotsContainer.insertBefore(box, afterTitle.nextSibling);
-              } else {
-                selectedSlotsContainer.insertBefore(box, selectedSlotsContainer.firstChild);
-              }
-            }
-            const names = missing.map(s => {
-              // Prefer Station — Item text
-              const item = timeBlockItems.find(el => el.getAttribute('data-block-id') === s.id);
-              const itemTitle = item ? (item.getAttribute('data-item-title') || '').trim() : '';
-              const cat = s.stationName || '';
-              return cat && itemTitle ? `${cat} — ${itemTitle}` : (s.displayText || cat || s.id);
-            });
-            box.innerHTML = `<p style="margin:0;">Please enter a dish name for: <strong>${names.join(', ')}</strong>.</p>`;
-            const first = document.getElementById(`dish-note-${missing[0].id}`);
-            if (first && typeof first.focus === 'function') first.focus();
-          } catch (err) { /* ignore */ }
+          if (!step1Complete) {
+            showStep1Error(errors[0], focusEl);
+          } else {
+            showClientError(errors[0], focusEl);
+          }
+          return false;
         }
-      }
+        rebuildPayload();
+      });
+    }
 
-      const emailValid = validateEmailField();
-      const phoneValid = validatePhoneField();
-      if (!emailValid || !phoneValid) {
-        e.preventDefault();
-        const firstInvalid = !emailValid && emailInput ? emailInput : (!phoneValid && phoneInput ? phoneInput : null);
-        if (firstInvalid && typeof firstInvalid.focus === 'function') {
-          firstInvalid.focus();
+    // Party/registrant controls -> rebuild participant list and payload
+    if (partySizeInput) {
+      partySizeInput.addEventListener('input', () => {
+        ensureParticipantInputs();
+        if (!isManageMode) {
+          step1Complete = false;
+          updateStepVisibility();
+          updateSignupFormVisibility();
         }
-      }
+      });
+    }
+    if (step1ContinueBtn && !isManageMode) {
+      step1ContinueBtn.addEventListener('click', () => {
+        const result = validateStep1();
+        if (!result.ok) {
+          showStep1Error(result.message, result.focusEl);
+          return;
+        }
+        step1Complete = true;
+        updateStepVisibility();
+        updateSignupFormVisibility();
+        // When entering Step 2 fresh, clear any remembered participant selection so
+        // multi-participant pickers start on the placeholder.
+        lastSelectedParticipantKey = null;
+        rebuildParticipantPickers();
+        updateConflictingSlots();
+        const target = selectionStep || document.getElementById('step2Heading') || timeBlockItems[0];
+        if (target) {
+          const top = target.getBoundingClientRect().top + window.scrollY - 24;
+          window.scrollTo({ top, behavior: 'smooth' });
+          if (typeof target.focus === 'function') {
+            target.setAttribute('tabindex', '-1');
+            target.focus({ preventScroll: true });
+          }
+        }
+      });
+    }
+    registrantRadioEls.forEach(r => {
+      r.addEventListener('change', () => {
+        const registrantParticipating = registrantRadioEls.some(x => x.checked && x.value === 'yes');
+        const registrantName = (document.getElementById('signup-name') || {}).value || '';
+        if (registrantParticipating) {
+          if (!participants.length) participants.push({ name: registrantName || 'You' });
+          else participants[0].name = registrantName || 'You';
+        } else if (participants[0]) {
+          participants[0].name = '';
+        }
+        step1Complete = false;
+        lastSelectedParticipantKey = null;
+        ensureParticipantInputs();
+        updateStepVisibility();
+        updateSignupFormVisibility();
+      });
     });
+    const registrantNameInput = document.getElementById('signup-name');
+    if (registrantNameInput && !isManageMode) {
+      registrantNameInput.addEventListener('input', () => {
+        registrantNameInput.classList.remove('input-error');
+        registrantNameInput.removeAttribute('aria-invalid');
+        step1Complete = false;
+        const registrantParticipating = registrantRadioEls.some(r => r.checked && r.value === 'yes');
+        if (registrantParticipating && participants[0]) {
+          participants[0].name = registrantNameInput.value || participants[0].name;
+          rebuildParticipantPickers();
+          renderSelectedList();
+          rebuildPayload();
+        }
+        ensureParticipantInputs();
+        updateStepVisibility();
+        updateSignupFormVisibility();
+      });
+    }
+    const registrantEmailInput = document.getElementById('signup-email');
+    if (registrantEmailInput && !isManageMode) {
+      registrantEmailInput.addEventListener('input', () => {
+        registrantEmailInput.classList.remove('input-error');
+        registrantEmailInput.removeAttribute('aria-invalid');
+        step1Complete = false;
+        updateStepVisibility();
+        updateSignupFormVisibility();
+      });
+    }
+
+    // Kick off initial renders + payload
+    ensureParticipantInputs();
+    rebuildParticipantPickers();
+    updateStepVisibility();
+
+    if (!isManageMode) {
+      hydrateAssignmentsFromPayload();
+    } else if (isManageMode && manageDataEl) {
+      // Pre-populate manage assignments
+      try {
+        const data = JSON.parse(manageDataEl.getAttribute('data-assignments') || '{}');
+        (data.participants || []).forEach(p => {
+          (p.schedule || []).forEach(s => {
+            const metaItem = timeBlockItems.find(el => el.getAttribute('data-block-id') === String(s.time_block_id));
+            if (!metaItem) return;
+            const meta = getSlotMeta(metaItem);
+            addAssignment(meta, participantKeyFromId(p.participant_id));
+          });
+          (p.potluck || []).forEach(s => {
+            const metaItem = timeBlockItems.find(el => el.getAttribute('data-block-id') === String(s.item_id));
+            if (!metaItem) return;
+            const meta = getSlotMeta(metaItem);
+            addAssignment(meta, participantKeyFromId(p.participant_id), s.dish_name || '');
+          });
+        });
+      } catch (err) {
+        console.warn('[VolunteerUI] Failed to pre-populate manage assignments:', err && err.message);
+      }
+    }
+
+    if (!isManageMode) updateParticipantNamesFromInputs();
+    updateCapacityStates();
+    updateConflictingSlots();
+    renderSelectedList();
+    rebuildPayload();
+    updateSignupFormVisibility();
+    updateSelectionFabVisibility();
 
   } catch (e) {
     console.error('[VolunteerUI] Fatal initialization error:', e);
